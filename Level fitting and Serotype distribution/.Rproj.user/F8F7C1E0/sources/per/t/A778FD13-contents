@@ -1,0 +1,325 @@
+---
+title: "Simplified_Fits"
+author: "Ray Elementi"
+date: "2025-03-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(rjags) # https://mcmc-jags.sourceforge.io/
+library(fitdistrplus)
+library(stringr)
+library(pastecs)
+library(knitr)
+library(MASS)
+
+```
+
+```{r QPCR FIT Fx}
+# rh_fit <- qpcr_fit(subset_data, 10^-1.48, 10^0, 10^4, 10^8, "qPCR")
+qpcr_fit <- function (input_table, lod, enumeration_lower, enumeration_upper, upper_bound, method, full=TRUE) {
+  # Create left/right table ----
+  left_right_table <- data.frame(
+    matrix(
+      ncol = 2,
+      nrow = dim(input_table)[1]
+    )
+  )
+  colnames(left_right_table) <- c('left', 'right')
+  colnames(input_table) <- c("test","value")
+  
+  # fill left/right table ----
+  i <- 1
+  while (i <= dim(input_table)[1]) {
+    if (grepl("qPCR", method)) {
+      x <- input_table$value[i]
+    } else if (grepl("plate count", method)|grepl("APC", method)) {
+      x <- input_table$value[i]
+    }
+    y <- input_table$test[i]
+    # TO DO: Zero detection
+    if (y=="Positive") {
+      if (grepl(">", x)) { # Has a "<", above enumeration_upper and cannot convert to a "real number" with as.numeric
+        left_right_table$left[i] <- (enumeration_upper)
+        left_right_table$right[i] <- (upper_bound)
+      } else if (grepl("<", x)) { # Has a "<", below enumeration_lower and cannot convert to a "real number" with as.numeric
+        left_right_table$left[i] <- (lod)
+        left_right_table$right[i] <- (enumeration_lower)
+      } else {
+        x <- as.numeric(x) # Is a "real number" and can be checked with numerical rules
+      }
+      
+      if (enumeration_upper<x) { # Above enumeration_upper
+        left_right_table$left[i] <- (enumeration_upper)
+        left_right_table$right[i] <- (upper_bound)
+      } else if ((enumeration_lower)<=x & x<=(enumeration_upper)) { # Between enumeration_lower and enumeration_upper
+        left_right_table$left[i] <- x/(1814/400)
+        left_right_table$right[i] <- x/(1814/400)
+      } else if (x < enumeration_lower) { # Below enumeration_lower
+        left_right_table$left[i] <- (lod)
+        left_right_table$right[i] <- (enumeration_lower)
+      }
+    } else if (y=="Negative") {
+      left_right_table$left[i] <- NA
+      if (full==FALSE) {
+        left_right_table$right[i] <- NA
+      } else {
+        left_right_table$right[i] <- (lod)
+      }
+    }
+    i <- i+1
+  }
+  if (full==FALSE) {
+    left_right_table <- left_right_table[-which(is.na(left_right_table$left) & is.na(left_right_table$right)),]
+  }
+  # Log10 ----
+  i <- 1
+  while (i <= length(left_right_table$left)) {
+    ## Left ----
+    if (left_right_table$left[i]!=0 & !is.na(left_right_table$left[i])) {
+        left_right_table$left[i] <- log10(left_right_table$left[i])
+    }
+    # Right ----
+    if (left_right_table$right[i]!=0 & !is.na(left_right_table$right[i])) {
+        left_right_table$right[i] <- log10(left_right_table$right[i])
+    }
+    i <- i+1
+  }
+  # Return ----
+  fit <- (fitdistrplus::fitdistcens(left_right_table, "norm"))
+  return(fit)
+}
+
+```
+
+
+```{r CFU Threshold Cut Fx}
+cfu_threshold_cut <- function(cfu, values, types, rounding) {
+  values <- as.data.frame(values)
+  colnames(values) <- c("V1")
+  types <- as.data.frame(types)
+  colnames(types) <- c("V1")
+  count <- sum(as.numeric(as.character(values$V1[which(types$V1=="value")]))>as.numeric(cfu))
+  percentage <- round(count/length(values$V1)*100, rounding)
+  paste0(">", MASS::fractions(cfu), " CFU: ", count, " (", percentage, "%)")
+}
+
+```
+
+
+```{r CFU Threshold Cut Return Fx }
+cfu_threshold_cut_return <- function(cfu, values, types, rounding) {
+  values <- as.data.frame(values)
+  colnames(values) <- c("V1")
+  types <- as.data.frame(types)
+  colnames(types) <- c("V1")
+  count <-  sum(as.numeric(as.character(values$V1[which(types$V1=="value")]))>as.numeric(cfu))
+  if (!is.na(rounding)) {
+    percentage <- round(count/length(values$V1)*100, rounding)
+  } else {
+    percentage <- count/length(values$V1)*100
+  }
+  return(c(count, percentage))
+}
+
+```
+
+
+```{r Fitted Count Parts Fx}
+fitted_count_parts <- function(mean, sd) {
+  cat(paste0(">10 CFU (Fit): ", round((1-pnorm(log10(10), mean, sd, TRUE))*100,2), "%\n>1 CFU (Fit): ", round((1-pnorm(log10(1), mean, sd, TRUE))*100,2), "%\n>1/(30*(1814/400)) CFU (Positive) (Fit): ", round((1-pnorm(log10(1/(30*(1814/400))), mean, sd, TRUE))*100,2), "%\n<1/(30*(1814/400) CFU (Negative) (Fit): ", round((pnorm(log10(1/(30*(1814/400))), mean, sd, TRUE))*100,2), "%\n"))
+}
+
+```
+
+
+
+```{r Fitted Count Ground Fx}
+fitted_count_ground <- function(mean, sd) {
+  cat(paste0(">10 CFU (Fit): ", round((1-pnorm(log10(10), mean, sd, TRUE))*100,2), "%\n>1 CFU (Fit): ", round((1-pnorm(log10(1), mean, sd, TRUE))*100,2), "%\n>1/325 CFU (Positive) (Fit): ", round((1-pnorm(log10(1/325), mean, sd, TRUE))*100,2), "%\n<1/325 CFU (Negative) (Fit): ", round((pnorm(log10(1/325), mean, sd, TRUE))*100,2), "%\n"))
+}
+
+```
+
+
+
+
+```{r Fitted Count Parts Return Fx}
+fitted_count_parts_return <- function(mean, sd, l=c(10,1,1/30)) {
+  return(c((1-pnorm(log10(l[1]), mean, sd, TRUE))*100, (1-pnorm(log10(l[2]), mean, sd, TRUE))*100, (1-pnorm(log10(l[3]), mean, sd, TRUE))*100, (pnorm(log10(l[3]), mean, sd, TRUE))*100))
+}
+
+```
+
+
+```{r Fitted Count Ground Return Fx}
+fitted_count_ground_return <- function(mean, sd) {
+  return(c((1-pnorm(log10(10), mean, sd, TRUE))*100, (1-pnorm(log10(1), mean, sd, TRUE))*100, (1-pnorm(log10(1/325), mean, sd, TRUE))*100, (pnorm(log10(1/325), mean, sd, TRUE))*100))
+}
+
+```
+
+
+```{r USDA Chicken Parts Sampling Data}
+#fsis_haccp_chicken_parts_2023 <- read.csv(paste0(sub("/Fitting", "", getwd()),"/raw data/FSIS_RAW_Poultry_combined_2024-03-27.csv"))
+fsis_haccp_chicken_parts_2023 <- read.csv("FSIS_RAW_Poultry_combined_2024-03-27.csv")
+fsis_haccp_chicken_parts_2023 <- subset(fsis_haccp_chicken_parts_2023, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaQPCRml"))
+fsis_haccp_chicken_parts_2023 <- fsis_haccp_chicken_parts_2023[which(fsis_haccp_chicken_parts_2023$ProjectCode=="HC_CPT_LBW01"),]
+fsis_haccp_chicken_parts_2023$CollectionDate <- as.Date.character(fsis_haccp_chicken_parts_2023$CollectionDate, tryFormats = "%m/%d/%Y")
+fsis_haccp_chicken_parts_2023 <- fsis_haccp_chicken_parts_2023[which(fsis_haccp_chicken_parts_2023$CollectionDate>="2023-01-30"),]
+fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis=="NULL")] <- NA
+fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis <- factor(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis)
+fsis_haccp_chicken_parts_2023$SalmonellaSerotype[which(fsis_haccp_chicken_parts_2023$SalmonellaSerotype=="NULL")] <- NA
+fsis_haccp_chicken_parts_2023$SalmonellaSerotype <- factor(fsis_haccp_chicken_parts_2023$SalmonellaSerotype)
+fsis_haccp_chicken_parts_2023$SalmonellaQPCRml[which(fsis_haccp_chicken_parts_2023$SalmonellaQPCRml=="NULL")] <- NA
+fsis_haccp_chicken_parts_2023$value_type <- NA
+fsis_haccp_chicken_parts_2023$value_type[which(!is.na(fsis_haccp_chicken_parts_2023$SalmonellaQPCRml))] <- "value"
+fsis_haccp_chicken_parts_2023$value_type[grepl("<",fsis_haccp_chicken_parts_2023$SalmonellaQPCRml)] <- ("cutoff_left")
+fsis_haccp_chicken_parts_2023$value_type[grepl(">",fsis_haccp_chicken_parts_2023$SalmonellaQPCRml)] <- ("cutoff_right")
+fsis_haccp_chicken_parts_2023$value_actual <- fsis_haccp_chicken_parts_2023$SalmonellaQPCRml
+fsis_haccp_chicken_parts_2023$value_actual <- gsub("<", "", fsis_haccp_chicken_parts_2023$value_actual)
+fsis_haccp_chicken_parts_2023$value_actual <- gsub(">", "", fsis_haccp_chicken_parts_2023$value_actual)
+fsis_haccp_chicken_parts_2023$value_actual <- as.numeric(fsis_haccp_chicken_parts_2023$value_actual)
+
+subset_data <- subset(fsis_haccp_chicken_parts_2023, select = c("SalmonellaSpAnalysis", "SalmonellaQPCRml"))
+subset_data <- subset_data[-which(subset_data$SalmonellaSpAnalysis=="Positive" & is.na(subset_data$SalmonellaQPCRml)),]
+subset_data <- subset_data[which(subset_data$SalmonellaSpAnalysis!="26 Lab closed"),]
+fsis_haccp_chicken_parts_2023_fit <- qpcr_fit(subset_data, 1/(30*(1814/400)), 10^1/(1814/400), 10^7/(1814/400), 10^8/(1814/400), "qPCR")
+fsis_haccp_chicken_parts_2023_fit$estimate[1]
+fsis_haccp_chicken_parts_2023_fit$estimate[2]
+
+nrow(fsis_haccp_chicken_parts_2023)
+length(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis=="Negative")])
+length(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis=="Positive")])
+length(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis=="Positive" & fsis_haccp_chicken_parts_2023$value_actual > 4.545 & fsis_haccp_chicken_parts_2023$value_type=="value")])
+length(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis=="Positive" & fsis_haccp_chicken_parts_2023$value_actual > 45.45 & fsis_haccp_chicken_parts_2023$value_type=="value")])
+length(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_parts_2023$SalmonellaSpAnalysis=="Positive" & fsis_haccp_chicken_parts_2023$value_type=="cutoff_left")])
+
+fitted_count_parts(fsis_haccp_chicken_parts_2023_fit$estimate[1], fsis_haccp_chicken_parts_2023_fit$estimate[2])
+
+```
+
+
+```{r USDA Chicken Parts Serotype Dist for 2016-2021}
+#fsis_haccp_chicken_parts_fsis <- read.csv(paste0(sub("/Fitting", "", getwd()),"/raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv"))
+fsis_haccp_chicken_parts_fsis <- read.csv("FSIS_RAW_Poultry_combined_2024-09-16 (New).csv")
+fsis_haccp_chicken_parts_fsis <- subset(fsis_haccp_chicken_parts_fsis, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaQPCRml"))
+fsis_haccp_chicken_parts_fsis <- fsis_haccp_chicken_parts_fsis[which(fsis_haccp_chicken_parts_fsis$ProjectCode=="HC_CPT_LBW01"),]
+fsis_haccp_chicken_parts_fsis$CollectionDate <- as.Date.character(fsis_haccp_chicken_parts_fsis$CollectionDate, tryFormats = "%m/%d/%Y")
+fsis_haccp_chicken_parts_fsis <- fsis_haccp_chicken_parts_fsis[which(fsis_haccp_chicken_parts_fsis$CollectionDate>="2016-01-31"& fsis_haccp_chicken_parts_fsis$CollectionDate<="2024-12-31"),]
+fsis_haccp_chicken_parts_fsis$SalmonellaSpAnalysis[which(fsis_haccp_chicken_parts_fsis$SalmonellaSpAnalysis=="NULL")] <- NA
+fsis_haccp_chicken_parts_fsis$SalmonellaSpAnalysis <- factor(fsis_haccp_chicken_parts_fsis$SalmonellaSpAnalysis)
+fsis_haccp_chicken_parts_fsis$SalmonellaSerotype[which(fsis_haccp_chicken_parts_fsis$SalmonellaSerotype=="NULL")] <- NA
+fsis_haccp_chicken_parts_fsis$SalmonellaSerotype <- factor(fsis_haccp_chicken_parts_fsis$SalmonellaSerotype)
+fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml[which(fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml=="NULL")] <- NA
+fsis_haccp_chicken_parts_fsis$value_type <- NA
+fsis_haccp_chicken_parts_fsis$value_type[which(!is.na(fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml))] <- "value"
+fsis_haccp_chicken_parts_fsis$value_type[grepl("<",fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml)] <- ("cutoff_left")
+fsis_haccp_chicken_parts_fsis$value_type[grepl(">",fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml)] <- ("cutoff_right")
+fsis_haccp_chicken_parts_fsis$value_actual <- fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml
+fsis_haccp_chicken_parts_fsis$value_actual <- gsub("<", "", fsis_haccp_chicken_parts_fsis$value_actual)
+fsis_haccp_chicken_parts_fsis$value_actual <- gsub(">", "", fsis_haccp_chicken_parts_fsis$value_actual)
+fsis_haccp_chicken_parts_fsis$value_actual <- as.numeric(fsis_haccp_chicken_parts_fsis$value_actual)
+fsis_haccp_chicken_parts_fsis_positive<-subset(fsis_haccp_chicken_parts_fsis, SalmonellaSpAnalysis == "Positive")
+serotype_counts <- table(fsis_haccp_chicken_parts_fsis_positive$SalmonellaSerotype)
+serotype_proportion <- prop.table(serotype_counts)
+install.packages("writexl")
+library(writexl)
+serotype_distribution <- data.frame(serotype_counts, serotype_proportion)
+write_xlsx(serotype_distribution,"serotype_distribution_chicken_parts.xlsx")
+```
+
+
+```{r USDA Chicken Parts Serotype Dist for 07/04/2022-09/29/2023}
+fsis_haccp_chicken_parts_fsis <- read.csv("FSIS_RAW_Poultry_combined_2024-09-16 (New).csv")
+#fsis_haccp_chicken_parts_fsis <- read.csv(paste0(sub("/Fitting", "", getwd()),"/raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv"))
+fsis_haccp_chicken_parts_fsis <- subset(fsis_haccp_chicken_parts_fsis, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaQPCRml"))
+fsis_haccp_chicken_parts_fsis <- fsis_haccp_chicken_parts_fsis[which(fsis_haccp_chicken_parts_fsis$ProjectCode=="HC_CPT_LBW01"),]
+fsis_haccp_chicken_parts_fsis$CollectionDate <- as.Date.character(fsis_haccp_chicken_parts_fsis$CollectionDate, tryFormats = "%m/%d/%Y")
+fsis_haccp_chicken_parts_fsis <- fsis_haccp_chicken_parts_fsis[which(fsis_haccp_chicken_parts_fsis$CollectionDate>="2015-03-06"& fsis_haccp_chicken_parts_fsis$CollectionDate<="2022-07-01"),]
+fsis_haccp_chicken_parts_fsis$SalmonellaSpAnalysis[which(fsis_haccp_chicken_parts_fsis$SalmonellaSpAnalysis=="NULL")] <- NA
+fsis_haccp_chicken_parts_fsis$SalmonellaSpAnalysis <- factor(fsis_haccp_chicken_parts_fsis$SalmonellaSpAnalysis)
+fsis_haccp_chicken_parts_fsis$SalmonellaSerotype[which(fsis_haccp_chicken_parts_fsis$SalmonellaSerotype=="NULL")] <- NA
+fsis_haccp_chicken_parts_fsis$SalmonellaSerotype <- factor(fsis_haccp_chicken_parts_fsis$SalmonellaSerotype)
+fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml[which(fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml=="NULL")] <- NA
+fsis_haccp_chicken_parts_fsis$value_type <- NA
+fsis_haccp_chicken_parts_fsis$value_type[which(!is.na(fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml))] <- "value"
+fsis_haccp_chicken_parts_fsis$value_type[grepl("<",fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml)] <- ("cutoff_left")
+fsis_haccp_chicken_parts_fsis$value_type[grepl(">",fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml)] <- ("cutoff_right")
+fsis_haccp_chicken_parts_fsis$value_actual <- fsis_haccp_chicken_parts_fsis$SalmonellaQPCRml
+fsis_haccp_chicken_parts_fsis$value_actual <- gsub("<", "", fsis_haccp_chicken_parts_fsis$value_actual)
+fsis_haccp_chicken_parts_fsis$value_actual <- gsub(">", "", fsis_haccp_chicken_parts_fsis$value_actual)
+fsis_haccp_chicken_parts_fsis$value_actual <- as.numeric(fsis_haccp_chicken_parts_fsis$value_actual)
+fsis_haccp_chicken_parts_fsis_positive<-subset(fsis_haccp_chicken_parts_fsis, SalmonellaSpAnalysis == "Positive")
+serotype_counts <- table(fsis_haccp_chicken_parts_fsis_positive$SalmonellaSerotype)
+serotype_proportion <- prop.table(serotype_counts)
+#install.packages("writexl")
+library(writexl)
+serotype_distribution <- data.frame(serotype_counts, serotype_proportion)
+write_xlsx(serotype_distribution,"serotype_distribution_chicken_parts_minho's.xlsx")
+
+```
+
+
+```{r USDA Chicken Carcass Sampling Data}
+fsis_haccp_chicken_carcass_2023 <- read.csv("FSIS_RAW_Poultry_combined_2024-03-27.csv")
+#fsis_haccp_chicken_carcass_2023 <- read.csv(paste0(sub("/Fitting", "", getwd()),"/raw data/FSIS_RAW_Poultry_combined_2024-03-27.csv"))
+fsis_haccp_chicken_carcass_2023 <- subset(fsis_haccp_chicken_carcass_2023, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaQPCRml"))
+fsis_haccp_chicken_carcass_2023 <- fsis_haccp_chicken_carcass_2023[which(fsis_haccp_chicken_carcass_2023$ProjectCode=="HC_CH_CARC01"),]
+fsis_haccp_chicken_carcass_2023$CollectionDate <- as.Date.character(fsis_haccp_chicken_carcass_2023$CollectionDate, tryFormats = "%m/%d/%Y")
+fsis_haccp_chicken_carcass_2023 <- fsis_haccp_chicken_carcass_2023[which(fsis_haccp_chicken_carcass_2023$CollectionDate>="2022-08-07"),]
+fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis=="NULL")] <- NA
+fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis <- factor(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis)
+fsis_haccp_chicken_carcass_2023$SalmonellaSerotype[which(fsis_haccp_chicken_carcass_2023$SalmonellaSerotype=="NULL")] <- NA
+fsis_haccp_chicken_carcass_2023$SalmonellaSerotype <- factor(fsis_haccp_chicken_carcass_2023$SalmonellaSerotype)
+fsis_haccp_chicken_carcass_2023$SalmonellaQPCRml[which(fsis_haccp_chicken_carcass_2023$SalmonellaQPCRml=="NULL")] <- NA
+fsis_haccp_chicken_carcass_2023$value_type <- NA
+fsis_haccp_chicken_carcass_2023$value_type[which(!is.na(fsis_haccp_chicken_carcass_2023$SalmonellaQPCRml))] <- "value"
+fsis_haccp_chicken_carcass_2023$value_type[grepl("<",fsis_haccp_chicken_carcass_2023$SalmonellaQPCRml)] <- ("cutoff_left")
+fsis_haccp_chicken_carcass_2023$value_type[grepl(">",fsis_haccp_chicken_carcass_2023$SalmonellaQPCRml)] <- ("cutoff_right")
+fsis_haccp_chicken_carcass_2023$value_actual <- fsis_haccp_chicken_carcass_2023$SalmonellaQPCRml
+fsis_haccp_chicken_carcass_2023$value_actual <- gsub("<", "", fsis_haccp_chicken_carcass_2023$value_actual)
+fsis_haccp_chicken_carcass_2023$value_actual <- gsub(">", "", fsis_haccp_chicken_carcass_2023$value_actual)
+fsis_haccp_chicken_carcass_2023$value_actual <- as.numeric(fsis_haccp_chicken_carcass_2023$value_actual)
+
+subset_data <- subset(fsis_haccp_chicken_carcass_2023, select = c("SalmonellaSpAnalysis", "SalmonellaQPCRml"))
+subset_data <- subset_data[-which(subset_data$SalmonellaSpAnalysis=="Positive" & is.na(subset_data$SalmonellaQPCRml)),]
+subset_data <- subset_data[which(subset_data$SalmonellaSpAnalysis!="26 Lab closed"),]
+fsis_haccp_chicken_carcass_2023_fit <- qpcr_fit(subset_data, 1/(30*(1814/400)), 10^1/(1814/400), 10^7/(1814/400), 10^8/(1814/400), "qPCR")
+fsis_haccp_chicken_carcass_2023_fit$estimate[1]
+fsis_haccp_chicken_carcass_2023_fit$estimate[2]
+
+nrow(fsis_haccp_chicken_carcass_2023)
+length(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis=="Negative")])
+length(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis=="Positive")])
+length(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis=="Positive" & fsis_haccp_chicken_carcass_2023$value_actual > 4.545 & fsis_haccp_chicken_carcass_2023$value_type=="value")])
+length(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis=="Positive" & fsis_haccp_chicken_carcass_2023$value_actual > 45.45 & fsis_haccp_chicken_carcass_2023$value_type=="value")])
+length(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis[which(fsis_haccp_chicken_carcass_2023$SalmonellaSpAnalysis=="Positive" & fsis_haccp_chicken_carcass_2023$value_type=="cutoff_left")])
+
+fitted_count_parts(fsis_haccp_chicken_carcass_2023_fit$estimate[1], fsis_haccp_chicken_carcass_2023_fit$estimate[2])
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
