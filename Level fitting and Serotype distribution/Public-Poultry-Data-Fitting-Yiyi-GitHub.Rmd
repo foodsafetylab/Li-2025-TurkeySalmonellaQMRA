@@ -234,10 +234,10 @@ MPN_Refence$MPN_Index <- as.double(MPN_Refence$MPN_Index)
 
 ###### Comminuted Turkey Fitting - qPCR 
 ```{r USDA Raw Poultry sampling comminuted Turkey, updated data to 09/16/2024 (2023-2024)}
-fsis_haccp_turkey_2024 <- read.csv(paste0(sub("/Fitting", "", getwd()),"/raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv"))
+fsis_haccp_turkey_2024 <- read.csv("C:/Users/yiyili2/Box/Poultry/USPoultry work part 2/Paper documents/GitHub Code/Li-2025-TurkeySalmonellaQMRA/Li-2025-TurkeySalmonellaQMRA/Raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv")
 fsis_haccp_turkey_2024 <- subset(fsis_haccp_turkey_2024, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaQPCRg"))
 fsis_haccp_turkey_2024 <- fsis_haccp_turkey_2024[which(fsis_haccp_turkey_2024$ProjectCode=="HC_TU_COM01"),]
-fsis_haccp_turkey_2024$CollectionDate <- as.Date.character(fsis_haccp_turkey_2024$CollectionDate, tryFormats = "%m/%d/%Y")
+fsis_haccp_turkey_2024$CollectionDate <- as.Date(fsis_haccp_turkey_2024$CollectionDate, tryFormats = "%m/%d/%Y")
 fsis_haccp_turkey_2024 <- fsis_haccp_turkey_2024[which(fsis_haccp_turkey_2024$CollectionDate>="2023-04-05"),]
 fsis_haccp_turkey_2024$SalmonellaSpAnalysis <- factor(fsis_haccp_turkey_2024$SalmonellaSpAnalysis)
 fsis_haccp_turkey_2024$SalmonellaSerotype[which(fsis_haccp_turkey_2024$SalmonellaSerotype=="NULL")] <- NA
@@ -277,7 +277,7 @@ fitted_count_ground(fsis_haccp_turkey_2024_fit$estimate[1],fsis_haccp_turkey_202
 
 ###### Comminuted Turkey Fitting - MPN 
 ```{r USDA Raw Poultry sampling comminuted Turkey, updated data to 09/16/2024, (2016-2021)}
-fsis_haccp_turkey_2021 <- read.csv(paste0(sub("/Fitting", "", getwd()),"/raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv"))
+fsis_haccp_turkey_2021 <- read.csv("C:/Users/yiyili2/Box/Poultry/USPoultry work part 2/Paper documents/GitHub Code/Li-2025-TurkeySalmonellaQMRA/Li-2025-TurkeySalmonellaQMRA/Raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv")
 fsis_haccp_turkey_2021 <- subset(fsis_haccp_turkey_2021, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaMPNg"))
 fsis_haccp_turkey_2021 <- fsis_haccp_turkey_2021[which(fsis_haccp_turkey_2021$ProjectCode=="HC_TU_COM01"),]
 fsis_haccp_turkey_2021$CollectionDate <- as.Date.character(fsis_haccp_turkey_2021$CollectionDate, tryFormats = "%m/%d/%Y")
