@@ -8,7 +8,7 @@ In 2024, USDA-FSIS published risk assessments for *Salmonella* in raw poultry pr
 ## Usage
 ### Setup
 - **Raw data** was extracted from USDA-FSIS HACCP verification from [FSIS Laboratory Sampling Data Webpage](https://www.fsis.usda.gov/news-events/publications/raw-poultry-sampling) accessed September 16, 2024. Raw data can be found [here](/Raw data). 
-- ***Salmonella* level fitting** and **Serotype distribution** for both 2016-2021 and 2023-2024 datasets can be found [here](/Level fitting and Serotype distribution)
+- ***Salmonella* level fitting** and **Serotype distribution** for both 2016-2021 and 2023-2024 datasets can be found [here](/Level%20fitting%20and%20Serotype%20distribution)
 - **Risk assessment model** for the QMRA can be found [here](/Risk model). 
 
 ### Running
