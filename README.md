@@ -7,9 +7,9 @@ In 2024, USDA-FSIS published risk assessments for *Salmonella* in raw poultry pr
 
 ## Usage
 ### Setup
-**Raw data** was extracted from USDA-FSIS HACCP verification from [FSIS Laboratory Sampling Data Webpage](https://www.fsis.usda.gov/news-events/publications/raw-poultry-sampling) accessed September 16, 2024. Raw data can be found [here](/Raw data). 
-***Salmonella* level fitting** and **Serotype distribution** for both 2016-2021 and 2023-2024 datasets can be found [here](/Level fitting and Serotype distribution)
-**Risk assessment model** for the QMRA can be found [here](/Risk model). 
+- **Raw data** was extracted from USDA-FSIS HACCP verification from [FSIS Laboratory Sampling Data Webpage](https://www.fsis.usda.gov/news-events/publications/raw-poultry-sampling) accessed September 16, 2024. Raw data can be found [here](/https://github.com/foodsafetylab/Li-2025-TurkeySalmonellaQMRA/tree/main/Raw%20data). 
+- ***Salmonella* level fitting** and **Serotype distribution** for both 2016-2021 and 2023-2024 datasets can be found [here](/https://github.com/foodsafetylab/Li-2025-TurkeySalmonellaQMRA/tree/main/Level%20fitting%20and%20Serotype%20distribution)
+- **Risk assessment model** for the QMRA can be found [here](/http://github.com/foodsafetylab/Li-2025-TurkeySalmonellaQMRA/tree/main/Risk%20model). 
 
 ### Running
 R models can be run by opening the Risk Model.Rproj file, followed by "Turkey model_baseline.Rmd" for scenarios using the majority clustering method and "Turkey model_proportion.Rmd" for scenarios using the proportion clustering method. Please follow the annotations and run the required chunks of code. 
@@ -32,8 +32,5 @@ Include citation here.
 ## License
 This project's code is licensed under the GNU General Public License v3.0 and dataset is licensed the Creative Commons Attribution Share Alike 4.0 International license. Please see the [LICENSE.code](/LICENSE.code) and [LICENSE.dataset](/LICENSE.dataset) files for details.
 
-## Acknowledgements
-Include acknowledgements relevant to the project here.
-
 ## Funding
-Include the source of project funding here.
+This study was an extension project of #BRF-015 Risk Assessment Comparing Alternative Approaches to Regulating Salmonella in Poultry by Public Health Impact Factors, funded by US Poultry and Egg Association. This work was supported by the Jonathan Baldwin Turner Fellowship, awarded to Yiyi Li, from the College of Agricultural, Consumer and Environmental Sciences at the University of Illinois Urbana-Champaign. 
