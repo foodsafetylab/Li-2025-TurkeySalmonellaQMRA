@@ -4,16 +4,26 @@ author: "Cecil Barnett-Neefs"
 output: html_document
 date: "2023-06-01"
 ---
+```{r}
+#Setting Working Directory-------------------------------------
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path)) #Set working directory to the path of document
+```
 
 ```{r setup, echo=FALSE}
-library(readxl)
+rm(list = ls())
 library(rjags) # https://mcmc-jags.sourceforge.io/
 library(fitdistrplus)
+library(pastecs)
+library(coda)
 library(stringr)
 library(pastecs)
 library(knitr)
 library(MASS)
+library(writexl)
+```
 
+#### MPN fitting function (Uses the Ebel model modified by Kowalcyk JAGS_v4)
+```{r}
 # MPN Fit ----
 # Uses the Ebel model modified by Kowalcyk
 # Important: Returns in LN format! Use log10(exp()) to correct
@@ -27,49 +37,101 @@ mpn_fit <- function(mpn_data, n_total, n_pos_test, n_pos_test_mpn, n_tubes, type
   
   if (type == "ground") {
     v.screen <- 325 # From Kowalcyk Model-turkey  
-    v.mpn <- 1 # From Kowalcyk Model-turkey: Ground model does not use v.mpn, set to 1 so that we don't have to create multiple files
+   # v.mpn <- 1 # From Kowalcyk Model-turkey: Ground model does not use v.mpn, set to 1 so that we don't have to create multiple files
   } else if (type == "parts") {
     v.screen <- 136.35 # From Kowalcyk Model-chicken
     v.mpn <- 45.45 # From Kowalcyk Model-chicken
   }
+  colnames(mpn_data) <- c("V1", "V2","V3","V4","V5")
+  poscr<- rep(1,N.pos.test.mpn)
+  tube.mpn <- cbind(poscr, mpn_data)
   
   screen.results <- c(
-    rep(1,N.pos.test.mpn),
-    rep(1,N.pos.test-N.pos.test.mpn),
-    rep(0,N.total-N.pos.test)
+    rep(0,N.total-N.pos.test),
+    rep(1,N.pos.test-N.pos.test.mpn)
   )
+  
+    sink("MPN_JAGSmodel_v4.R")
+  cat("
+      model{
+      
+      # PRIORS
+      # Broad priors of a lognormal describing CFU per gram of product.  
+      # (Note: if using Win/OpenBugs, they use the natural log (ln) scale so also include a transformation to the log base 10 scale).
+      
+      mu ~ dnorm(-9.4,1.1)
+      tau ~ dgamma(0.1,0.1)
+      sigma <- sqrt(1 / tau)
+      
+      # Loop for the screen-positive tests that were also evaluated by MPN:
+      
+      for (i in 1:N.pos.test.mpn) {
+      
+      lambda[i] ~ dlnorm(mu,tau)
+      p_screen[i] <- 1- exp(-v.screen*lambda[i]) # 325 screening test
+      p_10[i]     <- 1- exp(-10.0*lambda[i])     # Probabilities for MPN tubes
+      p_1[i]      <- 1- exp(-1.0*lambda[i])
+      p_0.1[i]    <- 1- exp(-0.1*lambda[i])
+      p_0.01[i]   <- 1- exp(-0.01*lambda[i])
+      p_0.001[i]  <- 1- exp(-0.001*lambda[i])
+      
+      # Likelihood for the qualitative screening test
+      tube[i,1] ~ dbin(p_screen[i],1) # Test positive on 325 g screening test
+      
+      # Likelihoods for the MPN data at each dilution
+      tube[i,2] ~ dbin(p_10[i],N.tubes)  # with N.tunes=3, the draw is a number btw 0 and 3, included.
+      tube[i,3] ~ dbin(p_1[i],N.tubes)
+      tube[i,4] ~ dbin(p_0.1[i],N.tubes)
+      tube[i,5] ~ dbin(p_0.01[i],N.tubes)
+      tube[i,6] ~ dbin(p_0.001[i],N.tubes)
+      
+      }  # end of loop on screen-positive MPN-enumerated samples (i)
+      
+      
+      # Loop for the screened samples that had no MPN performed 
+      # (both detected and non-detected at +/- screening test):
+      
+      for (j in (N.pos.test.mpn+1):N.total){   
+      lambda[j] ~ dlnorm(mu,tau)
+      p_screen[j] <- 1-exp(-v.screen*lambda[j])
+      screened[j-N.pos.test.mpn] ~ dbin(p_screen[j],1)
+      } 
+      
+      
+      
+      }  # end of model
+      ", fill = TRUE)
+  sink()
+  
   
   data <- list(
     v.screen = v.screen,
-    v.mpn = v.mpn,
+    #v.mpn = v.mpn,
     N.tubes = num.tubes,
     N.total = N.total,
     N.pos.test.mpn = N.pos.test.mpn,
-    tube = mpn_data,
+    tube = tube.mpn,
     screened = screen.results
     )
   
   inits = list(
-    list(lambda = rlnorm(N.total,-9,0.02), tau = 0.05, .RNG.seed=1,.RNG.name= 'base::Wichmann-Hill'), # random seed
-    list(lambda = rlnorm(N.total,-6,0.03), tau = 0.3, .RNG.seed=2,.RNG.name= 'base::Wichmann-Hill'), 
-    list(lambda = rlnorm(N.total,-2.5,0.01), tau = 0.1, .RNG.seed=3,.RNG.name= 'base::Wichmann-Hill')
+    list(lambda = rlnorm(N.total,-3.9,0.3), tau = 1.1, .RNG.seed=1,.RNG.name= 'base::Wichmann-Hill'), # random seed
+    list(lambda = rlnorm(N.total,-3.0,0.1), tau = 1.1, .RNG.seed=2,.RNG.name= 'base::Wichmann-Hill'), 
+    list(lambda = rlnorm(N.total,-4,0.1), tau = 1.1, .RNG.seed=3,.RNG.name= 'base::Wichmann-Hill')
   )
   
-  n.adapt = 5000  # n iteration for adaptation
+  n.adapt = 1000  # n iteration for adaptation
   n.update = 10000  # n iterations to add
-  n.iter = 5000 # n iteration to keep in the final chain
-  n.thinval = 10 # Thinning constant (10).  (Use n.thinval = 1 when just checking out the model run).
-  burn.in = 100
+  n.iter = 50000 # n iteration to keep in the final chain
+  n.thinval = 50 # Thinning constant (10).  (Use n.thinval = 1 when just checking out the model run).
+  burn.in = 1000
   
+  # Call to JAGS:
   set.seed(1)
   if (n_tubes==3) {
-    model <- jags.model(
-      "JAGS_MPN_Model.jag",
-      n.adapt = n.adapt,
-      n.chains = 3,
-      inits = inits,
-      data = data
-    )
+    model <- jags.model("MPN_JAGSmodel_v4.R", 
+                        n.adapt = n.adapt, n.chains = 3, inits = inits, data = data)
+
   } else if(n_tubes==5) {
     model <- jags.model(
       "JAGS_MPN_Model_5-Tube.jag",
@@ -84,7 +146,7 @@ mpn_fit <- function(mpn_data, n_total, n_pos_test, n_pos_test_mpn, n_tubes, type
     model,
     n.iter = n.update
   ))
-  zm1 <- coda.samples(
+  zm1 <<- coda.samples(
     model,
     variable.names = c("mu","tau"),
     n.iter = n.iter,
@@ -104,14 +166,18 @@ mpn_fit <- function(mpn_data, n_total, n_pos_test, n_pos_test_mpn, n_tubes, type
   # Plots and outputs:
   summary_stats <- as.data.frame(cbind(pastecs::stat.desc(mu), pastecs::stat.desc(sigma)) )  
   names(summary_stats) <- c("mu","sigma")
-  fit <- c(mean(mu), mean(sigma))
-  return(summary_stats)
+  summary_stats$mu_log10 <- log10(exp(summary_stats$mu))
+  summary_stats$sigma_log10 <- log10(exp(summary_stats$sigma))
+  fit <- c(mean(log10(exp(mu))), mean(log10(exp(sigma))))
+  
+  return(list(fit=fit,summary_stats = summary_stats ))
 }
 
 ```
 
+
+#### qPCR fitting function
 ```{r}
-# rh_fit <- qpcr_fit(subset_data, 10^-1.48, 10^0, 10^4, 10^8, "qPCR")
 qpcr_fit <- function (input_table, lod, enumeration_lower, enumeration_upper, upper_bound, method, full=TRUE) {
   # Create left/right table ----
   left_right_table <- data.frame(
@@ -184,7 +250,10 @@ qpcr_fit <- function (input_table, lod, enumeration_lower, enumeration_upper, up
   fit <- (fitdistrplus::fitdistcens(left_right_table, "norm"))
   return(fit)
 }
+```
 
+### Output function
+```{r}
 cfu_threshold_cut <- function(cfu, values, types, rounding) {
   values <- as.data.frame(values)
   colnames(values) <- c("V1")
@@ -209,48 +278,46 @@ cfu_threshold_cut_return <- function(cfu, values, types, rounding) {
   return(c(count, percentage))
 }
 
-fitted_count_parts <- function(mean, sd) {
-  cat(paste0(">10 CFU (Fit): ", round((1-pnorm(log10(10), mean, sd, TRUE))*100,2), "%\n>1 CFU (Fit): ", round((1-pnorm(log10(1), mean, sd, TRUE))*100,2), "%\n>1/(30*(1814/400)) CFU (Positive) (Fit): ", round((1-pnorm(log10(1/(30*(1814/400))), mean, sd, TRUE))*100,2), "%\n<1/(30*(1814/400) CFU (Negative) (Fit): ", round((pnorm(log10(1/(30*(1814/400))), mean, sd, TRUE))*100,2), "%\n"))
-}
 
 fitted_count_ground <- function(mean, sd) {
   cat(paste0(">10 CFU (Fit): ", round((1-pnorm(log10(10), mean, sd, TRUE))*100,2), "%\n>1 CFU (Fit): ", round((1-pnorm(log10(1), mean, sd, TRUE))*100,2), "%\n>1/325 CFU (Positive) (Fit): ", round((1-pnorm(log10(1/325), mean, sd, TRUE))*100,2), "%\n<1/325 CFU (Negative) (Fit): ", round((pnorm(log10(1/325), mean, sd, TRUE))*100,2), "%\n"))
 }
 
-fitted_count_parts_return <- function(mean, sd, l=c(10,1,1/30)) {
-  return(c((1-pnorm(log10(l[1]), mean, sd, TRUE))*100, (1-pnorm(log10(l[2]), mean, sd, TRUE))*100, (1-pnorm(log10(l[3]), mean, sd, TRUE))*100, (pnorm(log10(l[3]), mean, sd, TRUE))*100))
-}
 
 fitted_count_ground_return <- function(mean, sd) {
   return(c((1-pnorm(log10(10), mean, sd, TRUE))*100, (1-pnorm(log10(1), mean, sd, TRUE))*100, (1-pnorm(log10(1/325), mean, sd, TRUE))*100, (pnorm(log10(1/325), mean, sd, TRUE))*100))
 }
 
-MPN_Refence <- read.csv("MPN_Lookup.csv")
-MPN_Refence_LOD <- MPN_Refence[c(1,40),]
-MPN_Refence <- MPN_Refence[-c(1,40),]
-MPN_Refence$MPN_Index <- as.double(MPN_Refence$MPN_Index)
 ```
 
 
-###### Comminuted Turkey Fitting - qPCR 
+###### Comminuted Turkey Fitting - qPCR (2023-2024)
 ```{r USDA Raw Poultry sampling comminuted Turkey, updated data to 09/16/2024 (2023-2024)}
-fsis_haccp_turkey_2024 <- read.csv("C:/Users/yiyili2/Box/Poultry/USPoultry work part 2/Paper documents/GitHub Code/Li-2025-TurkeySalmonellaQMRA/Li-2025-TurkeySalmonellaQMRA/Raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv")
-fsis_haccp_turkey_2024 <- subset(fsis_haccp_turkey_2024, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaQPCRg"))
-fsis_haccp_turkey_2024 <- fsis_haccp_turkey_2024[which(fsis_haccp_turkey_2024$ProjectCode=="HC_TU_COM01"),]
-fsis_haccp_turkey_2024$CollectionDate <- as.Date(fsis_haccp_turkey_2024$CollectionDate, tryFormats = "%m/%d/%Y")
-fsis_haccp_turkey_2024 <- fsis_haccp_turkey_2024[which(fsis_haccp_turkey_2024$CollectionDate>="2023-04-05"),]
-fsis_haccp_turkey_2024$SalmonellaSpAnalysis <- factor(fsis_haccp_turkey_2024$SalmonellaSpAnalysis)
-fsis_haccp_turkey_2024$SalmonellaSerotype[which(fsis_haccp_turkey_2024$SalmonellaSerotype=="NULL")] <- NA
-fsis_haccp_turkey_2024$SalmonellaSerotype <- factor(fsis_haccp_turkey_2024$SalmonellaSerotype)
-fsis_haccp_turkey_2024$SalmonellaQPCRg[which(fsis_haccp_turkey_2024$SalmonellaQPCRg=="NULL")] <- NA
-fsis_haccp_turkey_2024$value_type <- NA
-fsis_haccp_turkey_2024$value_type[which(!is.na(fsis_haccp_turkey_2024$SalmonellaQPCRg))] <- "value"
-fsis_haccp_turkey_2024$value_type[grepl("<",fsis_haccp_turkey_2024$SalmonellaQPCRg)] <- ("cutoff_left")
-fsis_haccp_turkey_2024$value_type[grepl(">",fsis_haccp_turkey_2024$SalmonellaQPCRg)] <- ("cutoff_right")
-fsis_haccp_turkey_2024$value_actual <- fsis_haccp_turkey_2024$SalmonellaQPCRg
-fsis_haccp_turkey_2024$value_actual <- gsub("<", "", fsis_haccp_turkey_2024$value_actual)
-fsis_haccp_turkey_2024$value_actual <- gsub(">", "", fsis_haccp_turkey_2024$value_actual)
-fsis_haccp_turkey_2024$value_actual <- as.numeric(fsis_haccp_turkey_2024$value_actual)
+
+library(dplyr)
+
+fsis_haccp_turkey_2024 <- read.csv("../Raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv") %>%
+  select(ProjectCode, CollectionDate, SalmonellaSpAnalysis, SalmonellaSerotype, SalmonellaQPCRg) %>%
+  filter(ProjectCode == "HC_TU_COM01") %>%
+  mutate(CollectionDate = as.Date(CollectionDate, tryFormats = "%m/%d/%Y")) %>%
+  filter(CollectionDate >= as.Date("2023-04-05")) %>%
+  mutate(
+    SalmonellaSpAnalysis = factor(SalmonellaSpAnalysis),
+    SalmonellaSerotype = ifelse(SalmonellaSerotype == "NULL", NA, SalmonellaSerotype),
+    SalmonellaSerotype = factor(SalmonellaSerotype),
+    SalmonellaQPCRg = ifelse(SalmonellaQPCRg == "NULL", NA, SalmonellaQPCRg),
+    value_type = case_when(
+      grepl("<", SalmonellaQPCRg) ~ "cutoff_left",
+      grepl(">", SalmonellaQPCRg) ~ "cutoff_right",
+      !is.na(SalmonellaQPCRg) ~ "value",
+      TRUE ~ NA_character_
+    ),
+    value_actual = SalmonellaQPCRg,
+    value_actual = gsub("<", "", value_actual),
+    value_actual = gsub(">", "", value_actual),
+    value_actual = as.numeric(value_actual)
+  )
+
 
 subset_data <- subset(fsis_haccp_turkey_2024, select = c("SalmonellaSpAnalysis", "SalmonellaQPCRg"))
 subset_data <- subset_data[-which(subset_data$SalmonellaSpAnalysis=="Positive" & is.na(subset_data$SalmonellaQPCRg)),]
@@ -269,40 +336,65 @@ length(fsis_haccp_turkey_2024$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2024$
 length(fsis_haccp_turkey_2024$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2024$SalmonellaSpAnalysis=="Positive")])/nrow(fsis_haccp_turkey_2024)
 length(fsis_haccp_turkey_2024$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2024$SalmonellaSpAnalysis=="Positive" & fsis_haccp_turkey_2024$value_actual > 1 & fsis_haccp_turkey_2024$value_type=="value")])/nrow(fsis_haccp_turkey_2024)
 length(fsis_haccp_turkey_2024$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2024$SalmonellaSpAnalysis=="Positive" & fsis_haccp_turkey_2024$value_actual > 10 & fsis_haccp_turkey_2024$value_type=="value")])/nrow(fsis_haccp_turkey_2024)
-length(fsis_haccp_turkey_2024$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2024$SalmonellaSpAnalysis=="Positive" & fsis_haccp_turkey_2024$value_type=="cutoff_left")])/nrow(fsis_haccp_turkey_2024)
 fitted_count_ground(fsis_haccp_turkey_2024_fit$estimate[1],fsis_haccp_turkey_2024_fit$estimate[2])
+```
+###### Comminuted Turkey Serotype Distribution (2023-2024) 
+```{r USDA Raw Poultry sampling comminuted Turkey, serotype distribution for 2023-2024}
+fsis_haccp_turkey_2024_positive <- fsis_haccp_turkey_2024[-which(fsis_haccp_turkey_2024$SalmonellaSpAnalysis=="Positive" & is.na(fsis_haccp_turkey_2024$SalmonellaQPCRg)),]
+fsis_haccp_turkey_2024_positive<-subset(fsis_haccp_turkey_2024_positive, SalmonellaSpAnalysis == "Positive")
+serotype_distribution_2024 <- fsis_haccp_turkey_2024_positive %>%
+  count(SalmonellaSerotype, name = "serotype_counts") %>%
+  mutate(serotype_proportion = serotype_counts / sum(serotype_counts))
+library(writexl)
+write_xlsx(serotype_distribution_2024,"serotype_distribution_2024.xlsx")
 ```
 
 
-
-###### Comminuted Turkey Fitting - MPN 
+###### Comminuted Turkey Fitting - MPN (2016-2021)
 ```{r USDA Raw Poultry sampling comminuted Turkey, updated data to 09/16/2024, (2016-2021)}
-fsis_haccp_turkey_2021 <- read.csv("C:/Users/yiyili2/Box/Poultry/USPoultry work part 2/Paper documents/GitHub Code/Li-2025-TurkeySalmonellaQMRA/Li-2025-TurkeySalmonellaQMRA/Raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv")
-fsis_haccp_turkey_2021 <- subset(fsis_haccp_turkey_2021, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaMPNg"))
-fsis_haccp_turkey_2021 <- fsis_haccp_turkey_2021[which(fsis_haccp_turkey_2021$ProjectCode=="HC_TU_COM01"),]
-fsis_haccp_turkey_2021$CollectionDate <- as.Date.character(fsis_haccp_turkey_2021$CollectionDate, tryFormats = "%m/%d/%Y")
-fsis_haccp_turkey_2021 <- fsis_haccp_turkey_2021[which(fsis_haccp_turkey_2021$CollectionDate>="2016-01-01" & fsis_haccp_turkey_2021$CollectionDate<="2019-12-31" ),]
-#fsis_haccp_turkey_2021$SalmonellaSpAnalysis <- factor(fsis_haccp_turkey_2021$SalmonellaSpAnalysis)
-fsis_haccp_turkey_2021$SalmonellaSpAnalysis <- ifelse(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Negative; Negative", "Negative",fsis_haccp_turkey_2021$SalmonellaSpAnalysis)
-fsis_haccp_turkey_2021$SalmonellaSpAnalysis <- ifelse(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Positive; Positive", "Positive",fsis_haccp_turkey_2021$SalmonellaSpAnalysis)
-fsis_haccp_turkey_2021 <- fsis_haccp_turkey_2021[-which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis == "NULL"), ]
-fsis_haccp_turkey_2021$SalmonellaSerotype[which(fsis_haccp_turkey_2021$SalmonellaSerotype=="NULL")] <- NA
-fsis_haccp_turkey_2021$SalmonellaSerotype <- factor(fsis_haccp_turkey_2021$SalmonellaSerotype)
-fsis_haccp_turkey_2021$SalmonellaMPNg[which(fsis_haccp_turkey_2021$SalmonellaMPNg=="NULL")] <- NA
-fsis_haccp_turkey_2021$value_type <- NA
-fsis_haccp_turkey_2021$value_type[which(!is.na(fsis_haccp_turkey_2021$SalmonellaMPNg))] <- "value"
-fsis_haccp_turkey_2021$value_type[grepl("<",fsis_haccp_turkey_2021$SalmonellaMPNg)] <- ("cutoff_left")
-fsis_haccp_turkey_2021$value_type[grepl(">",fsis_haccp_turkey_2021$SalmonellaMPNg)] <- ("cutoff_right")
-fsis_haccp_turkey_2021$value_actual <- fsis_haccp_turkey_2021$SalmonellaMPNg
-fsis_haccp_turkey_2021$value_actual <- gsub("<", "", fsis_haccp_turkey_2021$value_actual)
-fsis_haccp_turkey_2021$value_actual <- gsub(">", "", fsis_haccp_turkey_2021$value_actual)
-fsis_haccp_turkey_2021$value_actual <- as.numeric(fsis_haccp_turkey_2021$value_actual)
 
-subset_data <- subset(fsis_haccp_turkey_2021, select = c("SalmonellaSpAnalysis", "value_actual"))
-subset_data <- subset_data[-which(subset_data$SalmonellaSpAnalysis=="Positive" & is.na(subset_data$value_actual)),]
-fsis_haccp_turkey_2021_fit <- qpcr_fit(subset_data, 1/325, 0.03, 11, 110, "qPCR") 
-fsis_haccp_turkey_2021_fit$estimate[1]
-fsis_haccp_turkey_2021_fit$estimate[2]
+fsis_haccp_turkey_2021 <- read.csv("../Raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv") %>%
+  select(ProjectCode, CollectionDate, SalmonellaSpAnalysis, SalmonellaSerotype, SalmonellaMPNg, SalmonellaMPNcombo,SalmonellaMPNqual) %>%
+  filter(ProjectCode == "HC_TU_COM01") %>%
+  mutate(CollectionDate = as.Date(CollectionDate, tryFormats = "%m/%d/%Y")) %>%
+  filter(CollectionDate >= as.Date("2016-01-01") & CollectionDate <= as.Date("2019-12-31")) %>%
+  mutate(
+    SalmonellaSpAnalysis = factor(SalmonellaSpAnalysis),
+    SalmonellaSerotype = ifelse(SalmonellaSerotype == "NULL", NA, SalmonellaSerotype),
+    SalmonellaSerotype = factor(SalmonellaSerotype),
+    SalmonellaMPNg = ifelse(SalmonellaMPNg == "NULL", NA, SalmonellaMPNg),
+    SalmonellaMPNg = ifelse(SalmonellaMPNg == "<0.03; <0.03", "<0.03", SalmonellaMPNg), 
+    SalmonellaMPNcombo = ifelse(SalmonellaMPNcombo=="00000; 00000", "00000", SalmonellaMPNcombo), 
+    SalmonellaMPNqual = ifelse(SalmonellaMPNqual=="Negative; Negative", "Negative", SalmonellaMPNqual),
+    
+    value_type = case_when(
+      grepl("<", SalmonellaMPNg) ~ "cutoff_left",
+      grepl(">", SalmonellaMPNg) ~ "cutoff_right",
+      !is.na(SalmonellaMPNg) ~ "value",
+      TRUE ~ NA_character_
+    ),
+    value_actual = SalmonellaMPNg,
+    value_actual = gsub("<", "", value_actual),
+    value_actual = gsub(">", "", value_actual),
+    value_actual = as.numeric(value_actual),
+    
+    SalmonellaMPNcombo = str_pad(as.character(SalmonellaMPNcombo), 5, pad = "0"),
+    SalmonellaMPNqual = na_if(SalmonellaMPNqual, ""),
+    SalmonellaMPNqual = factor(SalmonellaMPNqual),
+
+    SalmonellaMPNcombo_Tube_1 = as.numeric(substr(SalmonellaMPNcombo, 1, 1)),
+    SalmonellaMPNcombo_Tube_2 = as.numeric(substr(SalmonellaMPNcombo, 2, 2)),
+    SalmonellaMPNcombo_Tube_3 = as.numeric(substr(SalmonellaMPNcombo, 3, 3)),
+    SalmonellaMPNcombo_Tube_4 = as.numeric(substr(SalmonellaMPNcombo, 4, 4)),
+    SalmonellaMPNcombo_Tube_5 = as.numeric(substr(SalmonellaMPNcombo, 5, 5))
+    ) %>% 
+  filter(SalmonellaSpAnalysis == "Positive"| SalmonellaSpAnalysis == "Negative") 
+
+
+
+n_total <- nrow(fsis_haccp_turkey_2021)
+n_pos_test <- nrow(fsis_haccp_turkey_2021[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis == "Positive"),])
+n_pos_test_mpn <- nrow(fsis_haccp_turkey_2021[which(fsis_haccp_turkey_2021$SalmonellaMPNqual == "Positive"),])
 
 
 nrow(fsis_haccp_turkey_2021)
@@ -310,331 +402,21 @@ length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$
 length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Positive")])
 length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Positive" & fsis_haccp_turkey_2021$value_actual > 1 & fsis_haccp_turkey_2021$value_type=="value")])
 length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Positive" & fsis_haccp_turkey_2021$value_actual > 10 & fsis_haccp_turkey_2021$value_type=="value")])
-length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Positive" & fsis_haccp_turkey_2021$value_type=="cutoff_left")])
 
 length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Negative")])/nrow(fsis_haccp_turkey_2021)
 length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Positive")])/nrow(fsis_haccp_turkey_2021)
 length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Positive" & fsis_haccp_turkey_2021$value_actual > 1 & fsis_haccp_turkey_2021$value_type=="value")])/nrow(fsis_haccp_turkey_2021)
 length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Positive" & fsis_haccp_turkey_2021$value_actual > 10 & fsis_haccp_turkey_2021$value_type=="value")])/nrow(fsis_haccp_turkey_2021)
-length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$SalmonellaSpAnalysis=="Positive" & fsis_haccp_turkey_2021$value_type=="cutoff_left")])
 
 
-fitted_count_ground(-4.602, 1.938)
-fitted_count_ground(-6.685992 ,2.332023)
-fitted_count_ground(-4.553844, 1.87764)
-
-```
-
-
-
-
-###### Comminuted Turkey Serotype Distribution (2023-2024) 
-```{r USDA Raw Poultry sampling comminuted Turkey, serotype distribution for 2023-2024}
-fsis_haccp_turkey_2024 <- read.csv(paste0(sub("/Fitting", "", getwd()),"/raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv"))
-fsis_haccp_turkey_2024 <- subset(fsis_haccp_turkey_2024, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaQPCRg"))
-fsis_haccp_turkey_2024 <- fsis_haccp_turkey_2024[which(fsis_haccp_turkey_2024$ProjectCode=="HC_TU_COM01"),]
-fsis_haccp_turkey_2024$CollectionDate <- as.Date.character(fsis_haccp_turkey_2024$CollectionDate, tryFormats = "%m/%d/%Y")
-fsis_haccp_turkey_2024 <- fsis_haccp_turkey_2024[which(fsis_haccp_turkey_2024$CollectionDate>="2023-04-05"),]
-fsis_haccp_turkey_2024$SalmonellaSpAnalysis <- factor(fsis_haccp_turkey_2024$SalmonellaSpAnalysis)
-fsis_haccp_turkey_2024$SalmonellaSerotype[which(fsis_haccp_turkey_2024$SalmonellaSerotype=="NULL")] <- NA
-fsis_haccp_turkey_2024$SalmonellaSerotype <- factor(fsis_haccp_turkey_2024$SalmonellaSerotype)
-fsis_haccp_turkey_2024$SalmonellaQPCRg[which(fsis_haccp_turkey_2024$SalmonellaQPCRg=="NULL")] <- NA
-fsis_haccp_turkey_2024$value_type <- NA
-fsis_haccp_turkey_2024$value_type[which(!is.na(fsis_haccp_turkey_2024$SalmonellaQPCRg))] <- "value"
-fsis_haccp_turkey_2024$value_type[grepl("<",fsis_haccp_turkey_2024$SalmonellaQPCRg)] <- ("cutoff_left")
-fsis_haccp_turkey_2024$value_type[grepl(">",fsis_haccp_turkey_2024$SalmonellaQPCRg)] <- ("cutoff_right")
-fsis_haccp_turkey_2024$value_actual <- fsis_haccp_turkey_2024$SalmonellaQPCRg
-fsis_haccp_turkey_2024$value_actual <- gsub("<", "", fsis_haccp_turkey_2024$value_actual)
-fsis_haccp_turkey_2024$value_actual <- gsub(">", "", fsis_haccp_turkey_2024$value_actual)
-fsis_haccp_turkey_2024$value_actual <- as.numeric(fsis_haccp_turkey_2024$value_actual)
-fsis_haccp_turkey_2024_positive <- fsis_haccp_turkey_2024[-which(fsis_haccp_turkey_2024$SalmonellaSpAnalysis=="Positive" & is.na(fsis_haccp_turkey_2024$SalmonellaQPCRg)),]
-fsis_haccp_turkey_2024_positive<-subset(fsis_haccp_turkey_2024_positive, SalmonellaSpAnalysis == "Positive")
-serotype_counts <- table(fsis_haccp_turkey_2024_positive$SalmonellaSerotype)
-serotype_proportion <- prop.table(serotype_counts)
-#install.packages("writexl")
-library(writexl)
-serotype_distribution <- data.frame(serotype_counts, serotype_proportion)
-write_xlsx(serotype_distribution,"serotype_distribution_2024.xlsx")
-```
-
-
-
-###### Comminuted Turkey Serotype Distribution (2016-2021) 
-```{r USDA Raw Poultry sampling comminuted Turkey, serotype distribution for 2016-2021}
-fsis_haccp_turkey_fsis <- read.csv(paste0(sub("/Fitting", "", getwd()),"/raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv"))
-fsis_haccp_turkey_fsis <- subset(fsis_haccp_turkey_fsis, select = c("ProjectCode", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaQPCRg"))
-fsis_haccp_turkey_fsis <- fsis_haccp_turkey_fsis[which(fsis_haccp_turkey_fsis$ProjectCode=="HC_TU_COM01"),]
-fsis_haccp_turkey_fsis$CollectionDate <- as.Date.character(fsis_haccp_turkey_fsis$CollectionDate, tryFormats = "%m/%d/%Y")
-fsis_haccp_turkey_fsis <- fsis_haccp_turkey_fsis[which(fsis_haccp_turkey_fsis$CollectionDate>="2016-01-01" & fsis_haccp_turkey_fsis$CollectionDate<="2021-12-31" ),]
-fsis_haccp_turkey_fsis$SalmonellaSpAnalysis <- factor(fsis_haccp_turkey_fsis$SalmonellaSpAnalysis)
-fsis_haccp_turkey_fsis$SalmonellaSerotype[which(fsis_haccp_turkey_fsis$SalmonellaSerotype=="NULL")] <- NA
-fsis_haccp_turkey_fsis$SalmonellaSerotype <- factor(fsis_haccp_turkey_fsis$SalmonellaSerotype)
-fsis_haccp_turkey_fsis$SalmonellaQPCRg[which(fsis_haccp_turkey_fsis$SalmonellaQPCRg=="NULL")] <- NA
-fsis_haccp_turkey_fsis$value_type <- NA
-fsis_haccp_turkey_fsis$value_type[which(!is.na(fsis_haccp_turkey_fsis$SalmonellaQPCRg))] <- "value"
-fsis_haccp_turkey_fsis$value_type[grepl("<",fsis_haccp_turkey_fsis$SalmonellaQPCRg)] <- ("cutoff_left")
-fsis_haccp_turkey_fsis$value_type[grepl(">",fsis_haccp_turkey_fsis$SalmonellaQPCRg)] <- ("cutoff_right")
-fsis_haccp_turkey_fsis$value_actual <- fsis_haccp_turkey_fsis$SalmonellaQPCRg
-fsis_haccp_turkey_fsis$value_actual <- gsub("<", "", fsis_haccp_turkey_fsis$value_actual)
-fsis_haccp_turkey_fsis$value_actual <- gsub(">", "", fsis_haccp_turkey_fsis$value_actual)
-fsis_haccp_turkey_fsis$value_actual <- as.numeric(fsis_haccp_turkey_fsis$value_actual)
-fsis_haccp_turkey_fsis_positive<-subset(fsis_haccp_turkey_fsis, SalmonellaSpAnalysis == "Positive")
-serotype_counts <- table(fsis_haccp_turkey_fsis_positive$SalmonellaSerotype)
-serotype_proportion <- prop.table(serotype_counts)
-#install.packages("writexl")
-library(writexl)
-serotype_distribution <- data.frame(serotype_counts, serotype_proportion)
-write_xlsx(serotype_distribution,"serotype_distribution_2021.xlsx")
-
-```
-
-
-```{r 6-Turkey_Verification_Salmonella_2016_2021_final.csv Ebel, echo=FALSE}
-paste0("6-Turkey_Verification_Salmonella_2016_2021_final.csv")
-paste0(path_raw_data, "/", input_list[2])
-input_data <- read.csv(paste0(path_raw_data, "/", input_list[2]))
-#
-input_data <- read.csv(paste0(sub("/Fitting", "", getwd()),"/raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv"))
-input_data <- subset(input_data, select = c("ProjectCode","ProjectName", "CollectionDate", "SalmonellaSpAnalysis", "SalmonellaSerotype", "SalmonellaMPNg","SalmonellaMPNcombo","SalmonellaMPNqual"))
-clean_data <- input_data
-#clean_data$HACCPProcessingSize <- as.factor(clean_data$HACCPProcessingSize)
-#clean_data$ProjectCode <- as.factor(clean_data$ProjectCode)
-clean_data <- clean_data[which(clean_data$ProjectCode=="HC_TU_COM01"),]
-#clean_data$ProjectName <- as.factor(clean_data$ProjectName)
-clean_data$CollectionDate <- as.Date(clean_data$CollectionDate, format="%m/%d/%Y")
-clean_data <- clean_data[which(clean_data$CollectionDate>="2016-01-01" & clean_data$CollectionDate<="2019-12-31" ),]
-#clean_data$SalmonellaSpAnalysis <- as.factor(clean_data$SalmonellaSpAnalysis)
-#clean_data$SalmonellaSerotype <- as.factor(clean_data$SalmonellaSerotype)
-clean_data$SalmonellaSerotype[which(clean_data$SalmonellaSerotype=="")] <- NA
-#clean_data$SalmonellaMPNg <- as.factor(clean_data$SalmonellaMPNg)
-clean_data$SalmonellaMPNg[which(clean_data$SalmonellaMPNg=="")] <- NA
-clean_data$SalmonellaMPNcombo <- as.character(clean_data$SalmonellaMPNcombo)
-clean_data$SalmonellaMPNcombo <- str_pad(clean_data$SalmonellaMPNcombo, 5, pad = "0")
-clean_data$SalmonellaMPNqual <- as.factor(clean_data$SalmonellaMPNqual)
-clean_data$SalmonellaMPNqual[which(clean_data$SalmonellaMPNqual=="")] <- NA
-clean_data$SalmonellaMPNcombo_Tube_1 <- as.numeric(substr(clean_data$SalmonellaMPNcombo,1,1))
-clean_data$SalmonellaMPNcombo_Tube_2 <- as.numeric(substr(clean_data$SalmonellaMPNcombo,2,2))
-clean_data$SalmonellaMPNcombo_Tube_3 <- as.numeric(substr(clean_data$SalmonellaMPNcombo,3,3))
-clean_data$SalmonellaMPNcombo_Tube_4 <- as.numeric(substr(clean_data$SalmonellaMPNcombo,4,4))
-clean_data$SalmonellaMPNcombo_Tube_5 <- as.numeric(substr(clean_data$SalmonellaMPNcombo,5,5))
-
-clean_data <- clean_data[which(clean_data$SalmonellaSpAnalysis == "Positive" | clean_data$SalmonellaSpAnalysis == "Negative"), ]
-
-clean_data$SalmonellaMPNg <- ifelse(clean_data$SalmonellaMPNg=="<0.03; <0.03", "<0.03", clean_data$SalmonellaMPNg)
-
-which(clean_data$SalmonellaMPNg=="<0.03; <0.03") 
-
-#clean_data$SalmonellaSpAnalysis <- factor(clean_data$SalmonellaSpAnalysis)
-#clean_data$SalmonellaMPNg <- as.factor(clean_data$SalmonellaMPNg)
-
-
-n_total <- nrow(clean_data)
-n_pos_test <- nrow(clean_data[which(clean_data$SalmonellaSpAnalysis == "Positive"),])
-n_pos_test_mpn <- nrow(clean_data[which(clean_data$SalmonellaMPNqual == "Positive"),])
-
-clean_data$Salm_value_type <- NA
-clean_data$Salm_value_type[grepl("<",clean_data$SalmonellaMPNg)] <- ("cutoff_left")
-clean_data$Salm_value_type[grepl(">",clean_data$SalmonellaMPNg)] <- ("cutoff_right")
-clean_data$Salm_value_type[which(!grepl("<",clean_data$SalmonellaMPNg) & !grepl(">",clean_data$SalmonellaMPNg) & !is.na(clean_data$SalmonellaMPNg))] <- "value"
-paste0("Post Chill")
-paste0("Left Cutoff")
-summary(factor(clean_data$SalmonellaMPNg[which(clean_data$Salm_value_type=="cutoff_left")]))
-paste0("Right Cutoff")
-summary(factor(clean_data$SalmonellaMPNg[which(clean_data$Salm_value_type=="cutoff_right")]))
-paste0("Values")
-summary(factor(clean_data$SalmonellaMPNg[which(clean_data$Salm_value_type=="value")]))
-
-
-cfu_threshold_cut(10, clean_data$SalmonellaMPNg, clean_data$Salm_value_type, 2)
-cfu_threshold_cut(1, clean_data$SalmonellaMPNg, clean_data$Salm_value_type, 2)
-cfu_threshold_cut(1/10, clean_data$SalmonellaMPNg, clean_data$Salm_value_type, 2)
-cfu_threshold_cut(1/30, clean_data$SalmonellaMPNg, clean_data$Salm_value_type, 2)
-cfu_threshold_cut(1/325, clean_data$SalmonellaMPNg, clean_data$Salm_value_type, 2)
-
-over_10_cfu <- cfu_threshold_cut_return(10, clean_data$SalmonellaMPNg, clean_data$Salm_value_type, NA)[1]
-over_10_cfu_pct <- cfu_threshold_cut_return(10, clean_data$SalmonellaMPNg, clean_data$Salm_value_type, NA)[2]
-
-over_1_cfu <- cfu_threshold_cut_return(1, clean_data$SalmonellaMPNg, clean_data$Salm_value_type, NA)[1]
-over_1_cfu_pct <- cfu_threshold_cut_return(1, clean_data$SalmonellaMPNg, clean_data$Salm_value_type, NA)[2]
-
-paste0("Positives: ", sum(clean_data$SalmonellaSpAnalysis=="Positive"), " (", round(sum(clean_data$SalmonellaSpAnalysis=="Positive")/length(clean_data$SalmonellaSpAnalysis)*100,2), "%)")
-paste0("Negatives: ", sum(clean_data$SalmonellaSpAnalysis=="Negative"), " (", round(sum(clean_data$SalmonellaSpAnalysis=="Negative")/length(clean_data$SalmonellaSpAnalysis)*100,2), "%)")
-paste0("Total: ", length(clean_data$SalmonellaSpAnalysis))
-total <- length(clean_data$SalmonellaSpAnalysis)
-positives <- sum(clean_data$SalmonellaSpAnalysis=="Positive")
-positives_pct <- sum(clean_data$SalmonellaSpAnalysis=="Positive")/length(clean_data$SalmonellaSpAnalysis)*100
-negatives <- sum(clean_data$SalmonellaSpAnalysis=="Negative")
-negatives_pct <- sum(clean_data$SalmonellaSpAnalysis=="Negative")/length(clean_data$SalmonellaSpAnalysis)*100
 
 # Drop sal_mpn_tubes NAs for MPN fitting
-subset_data <- clean_data[!is.na(clean_data$SalmonellaMPNcombo),]
+subset_data <- fsis_haccp_turkey_2021[which(fsis_haccp_turkey_2021$SalmonellaMPNqual == "Positive"),] %>% 
+  select(SalmonellaMPNcombo_Tube_1, SalmonellaMPNcombo_Tube_2, SalmonellaMPNcombo_Tube_3, SalmonellaMPNcombo_Tube_4, SalmonellaMPNcombo_Tube_5)
 
-# MPN
-fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel
-fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel <- mpn_fit(subset(subset_data, select = c("SalmonellaMPNcombo_Tube_1","SalmonellaMPNcombo_Tube_2","SalmonellaMPNcombo_Tube_3","SalmonellaMPNcombo_Tube_4","SalmonellaMPNcombo_Tube_5")), n_total, n_pos_test, n_pos_test_mpn, 3, "ground")
-cat(paste0("\nMean: ", log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$mu[9])), " SD: ", log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$sigma[9])), "\n"))
-fitted_count_parts(log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$mu[9])), log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$sigma[9])))
-new_row <- data.frame(
-  scenario="Turkey_Verification_Salmonella_2016_2021_final.csv",
-  fit_type="mpn_ebel_log10norm",
-  total=total,
-  positives=positives,
-  positives_pct=positives_pct,
-  negatives=negatives,
-  negatives_pct=negatives_pct,
-  product_type="ground",
-  positive_threshold=1/325,
-  over_1_cfu=over_1_cfu,
-  over_1_cfu_pct=over_1_cfu_pct,
-  over_10_cfu=over_10_cfu,
-  over_10_cfu_pct=over_10_cfu_pct,
-  mean=log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$mu[9])),
-  sd=log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$sigma[9])),
-  positives_pct_fit=fitted_count_parts_return(log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$mu[9])), log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$sigma[9])))[3],
-  negatives_pct_fit=fitted_count_parts_return(log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$mu[9])), log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$sigma[9])))[4],
-  over_1_cfu_pct_fit=fitted_count_parts_return(log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$mu[9])), log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$sigma[9])))[2],
-  over_10_cfu_pct_fit=fitted_count_parts_return(log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$mu[9])), log10(exp(fit_dist_Turkey_Verification_Salmonella_2016_2021_final_ebel$sigma[9])))[1]
-)
+mpn_fit(mpn_data = subset_data, n_total, n_pos_test ,n_pos_test_mpn, n_tubes = 3, type = "ground")
 
-new_row
-
-fit_row_Turkey_Verification_Salmonella_2016_2021_final_ebel_output <- new_row
-
-```
-
-
-```{r}
-# Empty global environment and load libraries
-rm(list = ls())
-library(lattice)
-library(rjags)
-library(pastecs)
-library(coda)
-
-# set working directory:
-#setwd("//Projects/Concentration_Data/Concentration_Fitting")
-
-# Assumptions:
-# 1) each sample analyzed is a realization of a Poisson distribution (not overinflated)
-# 2) All samples in a set are considered here: those negative (non-detected) at screening, those positive at screening and not further anayzed, and those positive for screening and then enumerated via MPN.
-# 3) There are no "true negative" samples. Samples negative at screening are considered to have an average concentration that makes them unlikely to be detected.
-
-# Specify data:
-
-# Parameters for sampling results (screening and MPN assay):
-N.total = 4284       # overall number of samples tested
-N.pos.test = 766     # number of screening-positive (detected) samples. Not all were enumerated.
-N.pos.test.mpn = 179 # number of samples positive (detected) at +/- screening test that were also enumerated via MPN
-num.tubes = 3        # number of tubes at each dilution
-
-# new turkey data 2021
-N.total = 4945       # overall number of samples tested
-N.pos.test = 792     # number of screening-positive (detected) samples. Not all were enumerated.
-N.pos.test.mpn = 87 # number of samples positive (detected) at +/- screening test that were also enumerated via MPN
-num.tubes = 3        # number of tubes at each dilution
-
-#tube2 <-read.csv("Tube_scores.csv", head=F) # if loading a data file
-
-tube3 <- subset_data[which(subset_data$SalmonellaMPNqual == "Positive"),]
-tube3<-as.matrix(subset(tube3, select = c("SalmonellaMPNcombo_Tube_1","SalmonellaMPNcombo_Tube_2","SalmonellaMPNcombo_Tube_3","SalmonellaMPNcombo_Tube_4","SalmonellaMPNcombo_Tube_5")))
-
-tube4<-ifelse(is.na(tube3),0,tube3)
-colnames(tube4) <- c("V1", "V2","V3","V4","V5")
-
-
-# Data:  # These are MPN tube scores from the combined "NRTE" and "HC_TU" datasets
-v.screen = 325 # screen test volume (ml=g)
-poscr     <- rep(1,N.pos.test.mpn) # add column for screening results (here assumed all to be 1, as only screen-positives were enumerated via MPN)
-tube4plus <- cbind(poscr,tube4)
-
-screen.results <- c(rep(0,N.total-N.pos.test),rep(1,N.pos.test-N.pos.test.mpn))
-
-# JAGS model:
-
-{ # Extra bracket needed only for R markdown files
-  sink("MPN_JAGSmodel_v4.R")
-  cat("
-      model{
-      
-      # PRIORS
-      # Broad priors of a lognormal describing CFU per gram of product.  
-      # (Note: if using Win/OpenBugs, they use the natural log (ln) scale so also include a transformation to the log base 10 scale).
-      
-      mu ~ dnorm(-9.4,1.1)
-      tau ~ dgamma(0.1,0.1)
-      sigma <- sqrt(1 / tau)
-      
-      # Loop for the screen-positive tests that were also evaluated by MPN:
-      
-      for (i in 1:N.pos.test.mpn) {
-      
-      lambda[i] ~ dlnorm(mu,tau)
-      p_screen[i] <- 1- exp(-v.screen*lambda[i]) # 325 screening test
-      p_10[i]     <- 1- exp(-10.0*lambda[i])     # Probabilities for MPN tubes
-      p_1[i]      <- 1- exp(-1.0*lambda[i])
-      p_0.1[i]    <- 1- exp(-0.1*lambda[i])
-      p_0.01[i]   <- 1- exp(-0.01*lambda[i])
-      p_0.001[i]  <- 1- exp(-0.001*lambda[i])
-      
-      # Likelihood for the qualitative screening test
-      tube[i,1] ~ dbin(p_screen[i],1) # Test positive on 325 g screening test
-      
-      # Likelihoods for the MPN data at each dilution
-      tube[i,2] ~ dbin(p_10[i],N.tubes)  # with N.tunes=3, the draw is a number btw 0 and 3, included.
-      tube[i,3] ~ dbin(p_1[i],N.tubes)
-      tube[i,4] ~ dbin(p_0.1[i],N.tubes)
-      tube[i,5] ~ dbin(p_0.01[i],N.tubes)
-      tube[i,6] ~ dbin(p_0.001[i],N.tubes)
-      
-      }  # end of loop on screen-positive MPN-enumerated samples (i)
-      
-      
-      # Loop for the screened samples that had no MPN performed 
-      # (both detected and non-detected at +/- screening test):
-      
-      for (j in (N.pos.test.mpn+1):N.total){   
-      lambda[j] ~ dlnorm(mu,tau)
-      p_screen[j] <- 1-exp(-v.screen*lambda[j])
-      screened[j-N.pos.test.mpn] ~ dbin(p_screen[j],1)
-      } 
-      
-      
-      
-      }  # end of model
-      ", fill = TRUE)
-  sink()
-} # Extra bracket needed only for R markdown files
-
-
-# Specify data and inits:
-data = list(
-  v.screen = v.screen,
-  N.tubes = num.tubes,
-  N.total = N.total,
-  N.pos.test.mpn = N.pos.test.mpn,
-  tube = tube4plus,
-  screened = screen.results
-) 
-
-inits = list(
-  list(lambda = rlnorm(N.total,-3.9,0.3),tau = 1.1,.RNG.seed=1,.RNG.name= 'base::Wichmann-Hill'), 
-  list(lambda = rlnorm(N.total,-3.0,0.1),tau = 1.1,.RNG.seed=2,.RNG.name= 'base::Wichmann-Hill'), 
-  list(lambda = rlnorm(N.total,-4,0.1),  tau = 1.1,.RNG.seed=3,.RNG.name= 'base::Wichmann-Hill') 
-)
-
-# Specification for the MCMC sampler in JAGS:
-n.adapt   = 1000   # n iteration for adaptation
-n.update  = 10000  # n iterations for burn-in
-n.iter    = 50000  # n iteration to keep in the final chain
-n.thinval = 50     # Thinning constant (50).  (Use n.thinval = 1 when just checking out the model run).
-burn.in   = 1000   # 1000
-
-# Call to JAGS:
-set.seed(1)
-jm_a = jags.model("MPN_JAGSmodel_v4.R", n.adapt = n.adapt, n.chains = 3, inits = inits, data = data)
-#update(jm_a, n.iter = n.update)  # repeat this line if more iteration are needed for convergence
-zm1 = coda.samples(jm_a, variable.names = c("mu","tau"), n.iter = n.iter, thin=n.thinval) 
-
+### Outputs and Summary: 
 (SummaryResults=summary(window(zm1, start = burn.in), quantiles=c(0.025, 0.5, 0.975)))
 mu=    c(window(zm1[[1]][,1],start=burn.in),
          window(zm1[[2]][,1],start=burn.in),
@@ -686,8 +468,68 @@ boxplot(sigma,main="sigma",col="yellow")
 
 # Print summary statistics of fitted parameters of the lognormal distribution:
 print(summary_stats)
-print(summary_stats_log10)
 
 fitted_count_ground(-4.857386, 2.051831)
+
+
+#### fit the Salmonella level using FSIS turkey level parameters (FSIS, 2024)
+fitted_count_ground(-4.857, 2.333)
 ```
 
+
+
+
+###### Comminuted Turkey Serotype Distribution (2016-2021) 
+```{r USDA Raw Poultry sampling comminuted Turkey, serotype distribution for 2016-2021}
+fsis_haccp_turkey_2021_sero <- read.csv("../Raw data/FSIS_RAW_Poultry_combined_2024-09-16 (New).csv") %>%
+  select(ProjectCode, CollectionDate, SalmonellaSpAnalysis, SalmonellaSerotype, SalmonellaMPNg, SalmonellaMPNcombo,SalmonellaMPNqual) %>%
+  filter(ProjectCode == "HC_TU_COM01") %>%
+  mutate(CollectionDate = as.Date(CollectionDate, tryFormats = "%m/%d/%Y")) %>%
+  filter(CollectionDate >= as.Date("2016-01-01") & CollectionDate <= as.Date("2021-12-31")) %>%
+  mutate(
+    SalmonellaSpAnalysis = factor(SalmonellaSpAnalysis),
+    SalmonellaSerotype = ifelse(SalmonellaSerotype == "NULL", NA, SalmonellaSerotype),
+    SalmonellaSerotype = factor(SalmonellaSerotype),
+    SalmonellaMPNg = ifelse(SalmonellaMPNg == "NULL", NA, SalmonellaMPNg),
+    SalmonellaMPNg = ifelse(SalmonellaMPNg == "<0.03; <0.03", "<0.03", SalmonellaMPNg), 
+    SalmonellaMPNcombo = ifelse(SalmonellaMPNcombo=="00000; 00000", "00000", SalmonellaMPNcombo), 
+    SalmonellaMPNqual = ifelse(SalmonellaMPNqual=="Negative; Negative", "Negative", SalmonellaMPNqual),
+    
+    value_type = case_when(
+      grepl("<", SalmonellaMPNg) ~ "cutoff_left",
+      grepl(">", SalmonellaMPNg) ~ "cutoff_right",
+      !is.na(SalmonellaMPNg) ~ "value",
+      TRUE ~ NA_character_
+    ),
+    value_actual = SalmonellaMPNg,
+    value_actual = gsub("<", "", value_actual),
+    value_actual = gsub(">", "", value_actual),
+    value_actual = as.numeric(value_actual),
+    
+    SalmonellaMPNcombo = str_pad(as.character(SalmonellaMPNcombo), 5, pad = "0"),
+    SalmonellaMPNqual = na_if(SalmonellaMPNqual, ""),
+    SalmonellaMPNqual = factor(SalmonellaMPNqual),
+
+    SalmonellaMPNcombo_Tube_1 = as.numeric(substr(SalmonellaMPNcombo, 1, 1)),
+    SalmonellaMPNcombo_Tube_2 = as.numeric(substr(SalmonellaMPNcombo, 2, 2)),
+    SalmonellaMPNcombo_Tube_3 = as.numeric(substr(SalmonellaMPNcombo, 3, 3)),
+    SalmonellaMPNcombo_Tube_4 = as.numeric(substr(SalmonellaMPNcombo, 4, 4)),
+    SalmonellaMPNcombo_Tube_5 = as.numeric(substr(SalmonellaMPNcombo, 5, 5))
+    ) %>% 
+  filter(SalmonellaSpAnalysis == "Positive"| SalmonellaSpAnalysis == "Negative") 
+
+fsis_haccp_turkey_2021_sero_positive <- fsis_haccp_turkey_2021_sero %>%
+  filter(
+    SalmonellaSpAnalysis == "Positive",
+    !is.na(SalmonellaSerotype),
+    SalmonellaSerotype != "Final result - characterization not available"
+  )
+serotype_distribution_2021 <- fsis_haccp_turkey_2021_sero_positive %>%
+  count(SalmonellaSerotype, name = "serotype_counts") %>%
+  mutate(serotype_proportion = serotype_counts / sum(serotype_counts))
+  
+# write the excel file
+write_xlsx(serotype_distribution_2024,"serotype_distribution_2021.xlsx")
+
+
+```
