@@ -20,6 +20,7 @@ library(pastecs)
 library(knitr)
 library(MASS)
 library(writexl)
+library(dplyr)
 ```
 
 #### MPN fitting function (Uses the Ebel model modified by Kowalcyk JAGS_v4)
@@ -124,7 +125,7 @@ mpn_fit <- function(mpn_data, n_total, n_pos_test, n_pos_test_mpn, n_tubes, type
   n.update = 10000  # n iterations to add
   n.iter = 50000 # n iteration to keep in the final chain
   n.thinval = 50 # Thinning constant (10).  (Use n.thinval = 1 when just checking out the model run).
-  burn.in = 1000
+  burn.in <<- 1000
   
   # Call to JAGS:
   set.seed(1)
@@ -414,7 +415,9 @@ length(fsis_haccp_turkey_2021$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2021$
 subset_data <- fsis_haccp_turkey_2021[which(fsis_haccp_turkey_2021$SalmonellaMPNqual == "Positive"),] %>% 
   select(SalmonellaMPNcombo_Tube_1, SalmonellaMPNcombo_Tube_2, SalmonellaMPNcombo_Tube_3, SalmonellaMPNcombo_Tube_4, SalmonellaMPNcombo_Tube_5)
 
-mpn_fit(mpn_data = subset_data, n_total, n_pos_test ,n_pos_test_mpn, n_tubes = 3, type = "ground")
+haccp_mpn_fit_2021<-mpn_fit(mpn_data = subset_data, n_total, n_pos_test ,n_pos_test_mpn, n_tubes = 3, type = "ground")
+
+burn.in=1000
 
 ### Outputs and Summary: 
 (SummaryResults=summary(window(zm1, start = burn.in), quantiles=c(0.025, 0.5, 0.975)))
