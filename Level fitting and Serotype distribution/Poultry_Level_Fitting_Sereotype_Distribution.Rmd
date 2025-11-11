@@ -1,6 +1,6 @@
 ---
 title: "Public_Poultry_Data_Fitting_&_Serotype_Distribution"
-author: "Cecil Barnett-Neefs"
+author: "Cecil Barnett-Neefs & Yiyi Li"
 output: html_document
 date: "2023-06-01"
 ---
@@ -532,7 +532,7 @@ serotype_distribution_2021 <- fsis_haccp_turkey_2021_sero_positive %>%
   mutate(serotype_proportion = serotype_counts / sum(serotype_counts))
   
 # write the excel file
-write_xlsx(serotype_distribution_2024,"serotype_distribution_2021.xlsx")
+write_xlsx(serotype_distribution_2021,"serotype_distribution_2021.xlsx")
 
 
 ```
