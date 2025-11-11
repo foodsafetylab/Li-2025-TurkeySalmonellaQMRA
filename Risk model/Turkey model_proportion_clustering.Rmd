@@ -49,7 +49,7 @@ pr_ill_from_dose <- function(dose, alpha, beta) {
 
 get_table_values <- function(full_results_table) {
   specific_table <- data.frame(
-    scenario = c(rep(c("Over the level threshold", "Under the level threshold", "Inclusion list&over the level threshold", "Inclusion list|over the level threshold", "Typhimurim-Vaccine&over the level threshold", "Not-Typhimurium-Vaccine&over the level threshold"), each=3)),
+    scenario = c(rep(c("Over the level threshold", "Under the level threshold", "Inclusion list&over the level threshold", "Inclusion list|over the level threshold", "Exclusion&over the level threshold", "Not-Exclusion&over the level threshold"), each=3)),
     threshold = rep(
       c(
         mean(full_results_table$microbial_threshold_1),
@@ -822,8 +822,8 @@ poultry_model <- function(i, total_iterations,simulation_batch, model_mode, sero
   ## Serotype-based Standard ----
   # Inclusion List
   # Is serotype on Inclusion List?
-  #is_serotype_on_inclusion_list <- any(grepl(stringr::str_sub(serotype_in_serving, 1, -2), serotype_inclusion_list)) #Inclusion list 1 and 2 
-  is_serotype_on_inclusion_list <- any(grepl(serotype_in_serving, serotype_inclusion_list)) #Inclusion list 3
+  is_serotype_on_inclusion_list <- any(grepl(stringr::str_sub(serotype_in_serving, 1, -2), serotype_inclusion_list)) #Inclusion list 1 and 2 
+  #is_serotype_on_inclusion_list <- any(grepl(serotype_in_serving, serotype_inclusion_list)) #Inclusion list 3
   
   is_level_above_threshold_1_and_from_inclusion_list <- as.logical(is_level_above_threshold_1*is_serotype_on_inclusion_list) # Is level above threshold AND from inclusion list subtype?
   is_level_above_threshold_2_and_from_inclusion_list <- as.logical(is_level_above_threshold_2*is_serotype_on_inclusion_list) # Is level above threshold AND from inclusion list subtype?
@@ -836,8 +836,8 @@ poultry_model <- function(i, total_iterations,simulation_batch, model_mode, sero
 
   # Exclusion List
   # Is serotype on Exclusion List(=Typhimurium - Possible Vaccine Strain)?
-  #is_serotype_on_exclusion_list <- any(grepl(stringr::str_sub(serotype_in_serving, 1, -2), serotype_exclusion_list)) #Inclusion list 1 and 2 
-  is_serotype_on_exclusion_list <- any(grepl(serotype_in_serving, serotype_exclusion_list)) #Inclusion list 3
+  is_serotype_on_exclusion_list <- any(grepl(stringr::str_sub(serotype_in_serving, 1, -2), serotype_exclusion_list)) #Inclusion list 1 and 2 
+  #is_serotype_on_exclusion_list <- any(grepl(serotype_in_serving, serotype_exclusion_list)) #Inclusion list 3
   
   is_level_above_threshold_1_and_from_exclusion_list <- as.logical(is_level_above_threshold_1*is_serotype_on_exclusion_list) # Is level above threshold AND serotype Typhimurium - Possible Vaccine Strain?
   is_level_above_threshold_2_and_from_exclusion_list <- as.logical(is_level_above_threshold_2*is_serotype_on_exclusion_list) # Is level above threshold AND serotype Typhimurium - Possible Vaccine Strain?
@@ -1025,7 +1025,7 @@ poultry_model <- function(i, total_iterations,simulation_batch, model_mode, sero
     # https://qmrawiki.org/experiments/salmonella-anatum
     anatum_alpha <- 0.318
     anatum_beta <- 4729.90
-    if (stringr::str_sub(serotype_in_serving, 1, -2)=="Vaccined") {
+    if (stringr::str_sub(serotype_in_serving, 1, -2)=="Kentucky") {
       serving_alpha <- anatum_alpha
       serving_beta <- anatum_beta
     } else {
@@ -1639,7 +1639,7 @@ poultry_model <- function(i, total_iterations,simulation_batch, model_mode, sero
 # Parameter setup ----
 # NOTE: You can put these number straight into poultry_model_clustered() instead of defining them here, but this method lets you cite data sources more cleanly
 salmonella_mean <- -4.857 #FSIS HACCP Data 2016-2021
-salmonella_st_dev <- 2.052 #FSIS HACCP Data 2016-2021
+salmonella_st_dev <- 2.052 # Now is Bayesian fitting, for FSIS HACCP Data 2016-2021, use 2.333
 
 product_consumed_per_individual_per_day_mean <- 1.915239 # CDC 2016, Lambertini  et al. (2021) convert 4.41ln to log
 product_consumed_per_individual_per_day_st_dev <- 0.2866344 # CDC 2016, Lambertini  et al. (2021) convert 0.66ln to log 
@@ -1661,7 +1661,7 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   #inclusion_2_Cluster1_2016-2021: c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-","Berta","Newport", "Saintpaul", "Enteritidis", "Litchfield", "Manhattan"); 
   #inclusion_3_Prop_Cluster1_2016-2021: c("Worthington1", "Uganda1", "Typhimurium1","Thompson1","Tennessee1","Senftenberg1","Schwarzengrund1", "Saintpaul1", "Ruiru1", "Rissen1", "Reading1", "Panama1", "Orion1", "Ohio1", "Newport1", "Muenster1", "Muenchen1", "Montevideo1", "Minnesota1", "Meleagridis1", "Mbandaka1", "Manhattan1", "London1", "Liverpool1", "Litchfield1", "Kentucky1", "Johannesburg1", "Javiana1", "Infantis1", "Indiana1", "IIIa [1],13,23:g,z51:-1", "I 4,[5],12:i:-1", "Holcomb1", "Heidelberg1", "Hadar1", "Enteritidis1", "Cubana1", "Cerro1", "Bredeney1", "Braenderup1", "Berta1", "Anatum1", "Albany1", "Agona1", "Alachua1", "4,[5],12:d:-1", "3,10:e,h:-1")
   
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
   scaling_factor = 0.002,
   # 0.00023, pill=2.112415e-06
   product_consumed_per_individual_per_day_mean = product_consumed_per_individual_per_day_mean, # Log10 Product consumed mean; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
@@ -1684,7 +1684,7 @@ mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)
 # Parameter setup ----
 # NOTE: You can put these number straight into poultry_model_clustered() instead of defining them here, but this method lets you cite data sources more cleanly
 salmonella_mean <- -4.857 #FSIS HACCP Data 2016-2021
-salmonella_st_dev <- 2.052 #FSIS HACCP Data 2016-2021
+salmonella_st_dev <- 2.052 # Now is Bayesian fitting, for FSIS HACCP Data 2016-2021, use 2.333
 
 product_consumed_per_individual_per_day_mean <- 1.915239 # CDC 2016, Lambertini  et al. (2021) convert 4.41ln to log
 product_consumed_per_individual_per_day_st_dev <- 0.2866344 # CDC 2016, Lambertini  et al. (2021) convert 0.66ln to log 
@@ -1706,7 +1706,7 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   #inclusion_2_Cluster1_2016-2021: c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-","Berta","Newport", "Saintpaul", "Enteritidis", "Litchfield", "Manhattan"); 
   #inclusion_3_Prop_Cluster1_2016-2021: c("Worthington1", "Uganda1", "Typhimurium1","Thompson1","Tennessee1","Senftenberg1","Schwarzengrund1", "Saintpaul1", "Ruiru1", "Rissen1", "Reading1", "Panama1", "Orion1", "Ohio1", "Newport1", "Muenster1", "Muenchen1", "Montevideo1", "Minnesota1", "Meleagridis1", "Mbandaka1", "Manhattan1", "London1", "Liverpool1", "Litchfield1", "Kentucky1", "Johannesburg1", "Javiana1", "Infantis1", "Indiana1", "IIIa [1],13,23:g,z51:-1", "I 4,[5],12:i:-1", "Holcomb1", "Heidelberg1", "Hadar1", "Enteritidis1", "Cubana1", "Cerro1", "Bredeney1", "Braenderup1", "Berta1", "Anatum1", "Albany1", "Agona1", "Alachua1", "4,[5],12:d:-1", "3,10:e,h:-1")
   
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
   scaling_factor = 0.002,
   # 0.00023, pill=2.112415e-06
   product_consumed_per_individual_per_day_mean = product_consumed_per_individual_per_day_mean, # Log10 Product consumed mean; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
@@ -1729,7 +1729,7 @@ mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)
 # Parameter setup ----
 # NOTE: You can put these number straight into poultry_model_clustered() instead of defining them here, but this method lets you cite data sources more cleanly
 salmonella_mean <- -4.857 #FSIS HACCP Data 2016-2021
-salmonella_st_dev <- 2.052 #FSIS HACCP Data 2016-2021
+salmonella_st_dev <- 2.052 # Now is Bayesian fitting, for FSIS HACCP Data 2016-2021, use 2.333
 
 product_consumed_per_individual_per_day_mean <- 1.915239 # CDC 2016, Lambertini  et al. (2021) convert 4.41ln to log
 product_consumed_per_individual_per_day_st_dev <- 0.2866344 # CDC 2016, Lambertini  et al. (2021) convert 0.66ln to log 
@@ -1751,7 +1751,7 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   #inclusion_2_Cluster1_2016-2021: c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-","Berta","Newport", "Saintpaul", "Enteritidis", "Litchfield", "Manhattan"); 
   #inclusion_3_Prop_Cluster1_2016-2021: c("Worthington1", "Uganda1", "Typhimurium1","Thompson1","Tennessee1","Senftenberg1","Schwarzengrund1", "Saintpaul1", "Ruiru1", "Rissen1", "Reading1", "Panama1", "Orion1", "Ohio1", "Newport1", "Muenster1", "Muenchen1", "Montevideo1", "Minnesota1", "Meleagridis1", "Mbandaka1", "Manhattan1", "London1", "Liverpool1", "Litchfield1", "Kentucky1", "Johannesburg1", "Javiana1", "Infantis1", "Indiana1", "IIIa [1],13,23:g,z51:-1", "I 4,[5],12:i:-1", "Holcomb1", "Heidelberg1", "Hadar1", "Enteritidis1", "Cubana1", "Cerro1", "Bredeney1", "Braenderup1", "Berta1", "Anatum1", "Albany1", "Agona1", "Alachua1", "4,[5],12:d:-1", "3,10:e,h:-1")
   
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
   scaling_factor = 0.002,
   # 0.00023, pill=2.112415e-06
   product_consumed_per_individual_per_day_mean = product_consumed_per_individual_per_day_mean, # Log10 Product consumed mean; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
@@ -1795,7 +1795,7 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   #inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
   #inclusion_2_Cluster1_2023-2024: c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-", "Enteritidis", "Newport"); 
   #inclusion_3_Prop_Cluster1_2023-2024: c("Hadar1", "Agona1", "Infantis1","Schwarzengrund1","Reading1","Senftenberg1","Uganda1", "I 4,[5],12:i:-1", "Typhimurium1", "Brandenburg1", "Typhimurium - Possible Vaccine Strain1", "Albany1", "Enteritidis1", "Muenchen1", "Montevideo1", "Worthington1", "Alachua1", "Heidelberg1", "Johannesburg1", "Newport1", "Orion1", "Ouakam1", "Anatum1", "Barranquilla1", "Cubana1", "Gateshead1", "Kentucky1", "Muenster1")
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
   scaling_factor = 0.00025,
   product_consumed_per_individual_per_day_mean = product_consumed_per_individual_per_day_mean, # Log10 Product consumed mean; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
   product_consumed_per_individual_per_day_st_dev = product_consumed_per_individual_per_day_st_dev, # Log10 Product consumed standard deviation; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
@@ -1807,7 +1807,7 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   save_runs = TRUE, # Save runs to file?; IDEALLY KEEP AS TRUE
   use_attenuation = TRUE, # Use attenuation?
   use_scaling_factor = TRUE, # Use scaling factor?; DO NOT CHANGE
-  comment = "m3_variable_prop_2024_list1_updatedsero" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
+  comment = "m3_variable_prop_2024_list1_Kentucky" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
 )
 m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Kim et al. 2024 paper
 mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)
@@ -1838,7 +1838,7 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   #inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
   #inclusion_2_Cluster1_2023-2024: c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-", "Enteritidis", "Newport"); 
   #inclusion_3_Prop_Cluster1_2023-2024: c("Hadar1", "Agona1", "Infantis1","Schwarzengrund1","Reading1","Senftenberg1","Uganda1", "I 4,[5],12:i:-1", "Typhimurium1", "Brandenburg1", "Typhimurium - Possible Vaccine Strain1", "Albany1", "Enteritidis1", "Muenchen1", "Montevideo1", "Worthington1", "Alachua1", "Heidelberg1", "Johannesburg1", "Newport1", "Orion1", "Ouakam1", "Anatum1", "Barranquilla1", "Cubana1", "Gateshead1", "Kentucky1", "Muenster1")
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
   scaling_factor = 0.00025,
   product_consumed_per_individual_per_day_mean = product_consumed_per_individual_per_day_mean, # Log10 Product consumed mean; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
   product_consumed_per_individual_per_day_st_dev = product_consumed_per_individual_per_day_st_dev, # Log10 Product consumed standard deviation; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
@@ -1881,7 +1881,7 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   #inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
   #inclusion_2_Cluster1_2023-2024: c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-", "Enteritidis", "Newport"); 
   #inclusion_3_Prop_Cluster1_2023-2024: c("Hadar1", "Agona1", "Infantis1","Schwarzengrund1","Reading1","Senftenberg1","Uganda1", "I 4,[5],12:i:-1", "Typhimurium1", "Brandenburg1", "Typhimurium - Possible Vaccine Strain1", "Albany1", "Enteritidis1", "Muenchen1", "Montevideo1", "Worthington1", "Alachua1", "Heidelberg1", "Johannesburg1", "Newport1", "Orion1", "Ouakam1", "Anatum1", "Barranquilla1", "Cubana1", "Gateshead1", "Kentucky1", "Muenster1")
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
   scaling_factor = 0.00025,
   product_consumed_per_individual_per_day_mean = product_consumed_per_individual_per_day_mean, # Log10 Product consumed mean; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
   product_consumed_per_individual_per_day_st_dev = product_consumed_per_individual_per_day_st_dev, # Log10 Product consumed standard deviation; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
@@ -1899,8 +1899,54 @@ m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenua
 mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)
 ```
 
+```{r Variable Attenuation & Scaled Run for comminuted turkey, HACCP new (2023-2024) list 2&Exclusion list}
+# Parameter setup ----
+# NOTE: You can put these number straight into poultry_model_clustered() instead of defining them here, but this method lets you cite data sources more cleanly
+salmonella_mean <- -4.607818  #FSIS HACCP Data 2023-2024
+salmonella_st_dev <- 2.206763 #FSIS HACCP Data 2023-2024
+
+product_consumed_per_individual_per_day_mean <- 1.915239 # CDC 2016, Lambertini  et al. (2021) convert 4.41ln to log
+product_consumed_per_individual_per_day_st_dev <- 0.2866344 # CDC 2016, Lambertini  et al. (2021) convert 0.66ln to log 
+
+# Poultry Model Running ----
+# Create a new variable (i.e., raw_model_results) for each different scenario instead of overwriting to the same one
+m3_variable_attenuation_scaled <- poultry_model_clustered(
+  total_iterations = 1e6, # total_iterations, total number of iterations to run the model per simulation; RECOMMENDED TO USE 1e5-1e6 FOR FINAL RUNS, USE FEWER FOR "EXPERIMENTING" OR IT WILL TAKE LONGER,
+  total_simulations = 10, # total_simulations, total number of simulations to run; START WITH 1 FOR "EXPERIMENTING", USE 10 TO GET MORE DATA
+  cores = 12, # cores, total number of CPU cores to use in parallel, if you have fewer than the number specified the model should default to maximum available instead; MOST PCS SHOULD HAVE 12, IF UNSURE USE 12 OR detectCores()
+  model_mode = 3, # model_mode: 1 = use Beta-Poisson model and parameters from WHO/FAO (2002) for all serotypes, 2 = use Beta-Poisson model with parameters from WHO/FAO (2002)  for all serotypes that are not Typhimurium - Possible Vaccine Strain, 3 = use Serotype-specific DR parameters collected from Teunis (2022); MODEL MODE MUST BE 1, 2, OR 3, USE AS APPROPRIATE
+  serotype_probabilities = serotype_probabilities_2024, # dataframe with serotype probabilities; CAN BE SUBSTITUTED WITH A DIFFERENT DATAFRAME, SEE TOP OF setup
+  serotype_equivalents = serotype_equivalents, # dataframe with how to serotype equivalences for Tuenis submodel; CAN BE SUBSTITUTED WITH A DIFFERENT DATAFRAME, SEE TOP OF setup
+  salmonella_mean = salmonella_mean, # Log10 Salmonella dose mean; CAN BE CHANGED WITH A DIFFERENT VALUE
+  salmonella_st_dev = salmonella_st_dev, # Log10 Salmonella dose standard deviation; CAN BE CHANGED WITH A DIFFERENT VALUE
+  attenuation_input = c(-5, 1.91), # FSIS Variable attenuation, Quantitative Risk Assessment for Salmonella in Raw Chicken and Raw Chicken Products, page 42 
+  inclusion_list_input=c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-", "Enteritidis", "Newport"),# Change the inclusion list based on different scenarios; if change to list 3, remember to change the stringr::str_sub for the inclusion/exclusion list
+  #inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
+  #inclusion_2_Cluster1_2023-2024: c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-", "Enteritidis", "Newport"); 
+  #inclusion_3_Prop_Cluster1_2023-2024: c("Hadar1", "Agona1", "Infantis1","Schwarzengrund1","Reading1","Senftenberg1","Uganda1", "I 4,[5],12:i:-1", "Typhimurium1", "Brandenburg1", "Typhimurium - Possible Vaccine Strain1", "Albany1", "Enteritidis1", "Muenchen1", "Montevideo1", "Worthington1", "Alachua1", "Heidelberg1", "Johannesburg1", "Newport1", "Orion1", "Ouakam1", "Anatum1", "Barranquilla1", "Cubana1", "Gateshead1", "Kentucky1", "Muenster1")
+  exclusion_list_input=c("Adelaide","Agbeni","Agona","Alachua","Albany","Anatum","Bareilly","Braenderup","Brandenburg","Calabar","Carrau","Cerro","Chester","Concord","Cubana","Duisburg","Eastbourne","Gaminara","Gateshead","Give","Goldcoast","Hartford","Heidelberg","Hvittingfoss","Idikan","Infantis","Javiana","Johannesburg","Vaccined","Kiambu","Koessen","Leiden","Livingstone","Lomalinda","Lubbock","Mbandaka","Meleagridis","Miami","Mississippi","Montevideo","Muenster","Norwich","Ohio","Okatie","Oranienburg","Panama","Poona","Potsdam","Reading","Rissen","Rubislaw","Sandiego","Schwarzengrund","Senftenberg","Telelkebir","Thompson","Uganda","Urbana","Vinohrady","Virchow","Weltevreden"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  scaling_factor = 0.00025,
+  product_consumed_per_individual_per_day_mean = product_consumed_per_individual_per_day_mean, # Log10 Product consumed mean; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
+  product_consumed_per_individual_per_day_st_dev = product_consumed_per_individual_per_day_st_dev, # Log10 Product consumed standard deviation; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
+  annual_servings = 10983387032, #28482586137, # total turkey servings per year in the U.S; POPULATION*NUMBER OF SERVINGS PER PERSON, CURRENTLY USES 2023 DATA
+  teunis_dose_response = teunis_dose_response, # Tuenis DR function; DO NOT CHANGE
+  tuenis_submodel_parameters =  tuenis_submodel_parameters, # dataframe with Tuenis function subparameters; DO NOT CHANGE
+  pr_ill_from_dose = pr_ill_from_dose, # Probability illness from dose function; DO NOT CHANGE
+  poultry_model = poultry_model, # Core poultry model function; DO NOT CHANGE
+  save_runs = TRUE, # Save runs to file?; IDEALLY KEEP AS TRUE
+  use_attenuation = TRUE, # Use attenuation?
+  use_scaling_factor = TRUE, # Use scaling factor?; DO NOT CHANGE
+  comment = "m3_variable_prop_2024_list2_Exclusion" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
+)
+m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Kim et al. 2024 paper
+mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)
+m3_variable_attenuation_scaled_specifics
+```
+
+
+
 ```{r}
 #check baseline P(ill)
 mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)
-m3_variable_attenuation_scaled
+View(m3_variable_attenuation_scaled)
 ```

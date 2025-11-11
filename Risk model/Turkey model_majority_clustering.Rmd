@@ -28,7 +28,7 @@ pr_ill_from_dose <- function(dose, alpha, beta) {
 
 get_table_values <- function(full_results_table) {
   specific_table <- data.frame(
-    scenario = c(rep(c("Over the level threshold", "Under the level threshold", "Inclusion list&over the level threshold", "Inclusion list|over the level threshold", "Typhimurim-Vaccine&over the level threshold", "Not-Typhimurium-Vaccine&over the level threshold"), each=3)),
+    scenario = c(rep(c("Over the level threshold", "Under the level threshold", "Inclusion list&over the level threshold", "Inclusion list|over the level threshold", "Exclusion&over the level threshold", "No Exclusion&over the level threshold"), each=3)),
     threshold = rep(
       c(
         mean(full_results_table$microbial_threshold_1),
@@ -954,6 +954,8 @@ poultry_model <- function(i, total_iterations, simulation_batch, model_mode, ser
     } else {
       attenuation_value <- 1
     }
+  }else{
+    attenuation_value <- 1
   }
   if (use_scaling_factor) {
     scaling_factor_final <- scaling_factor
@@ -997,7 +999,7 @@ poultry_model <- function(i, total_iterations, simulation_batch, model_mode, ser
     # https://qmrawiki.org/experiments/salmonella-anatum
     anatum_alpha <- 0.318
     anatum_beta <- 4729.90
-    if (serotype_in_serving=="Vaccined") {
+    if (serotype_in_serving=="Kentucky") {
       serving_alpha <- anatum_alpha
       serving_beta <- anatum_beta
     } else {
@@ -1614,11 +1616,11 @@ poultry_model <- function(i, total_iterations, simulation_batch, model_mode, ser
 ```
 
 
-```{r Variable Attenuation & Scaled Run for comminuted turkey, HACCP baseline (2016-2021) #inclusion list 1}
+```{r Variable Attenuation & Scaled Run for comminuted turkey, HACCP baseline (2016-2021) Bayesian fitting #inclusion list 1}
 # Parameter setup ----
 # NOTE: You can put these number straight into poultry_model_clustered() instead of defining them here, but this method lets you cite data sources more cleanly
-salmonella_mean <- -4.857 #FSIS HACCP Data 2016-2021
-salmonella_st_dev <- 2.052 #FSIS HACCP Data 2016-2021
+salmonella_mean <- -4.857 #FSIS HACCP Data 2016-2021 using Bayesian fitting
+salmonella_st_dev <- 2.052 #FSIS HACCP Data 2016-2021 using Bayesian fitting 
 
 product_consumed_per_individual_per_day_mean <- 1.915239 # CDC 2016, Lambertini  et al. (2021) convert 4.41ln to log
 product_consumed_per_individual_per_day_st_dev <- 0.2866344 # CDC 2016, Lambertini  et al. (2021) convert 0.66ln to log 
@@ -1639,7 +1641,9 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   # Change the inclusion list based on different scenarios;
   # inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
   # inclusion_2_Cluster1 for 2016-2021:c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-","Berta","Newport", "Saintpaul", "Enteritidis", "Litchfield", "Manhattan");
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"), 
+  #c("Vaccined") of want to exclude "Typhimurium - Possible Vaccine Strain") ;
+  #c("Adelaide","Agbeni","Agona","Alachua","Albany","Anatum","Bareilly","Braenderup","Brandenburg","Calabar","Carrau","Cerro","Chester","Concord","Cubana","Duisburg","Eastbourne","Gaminara","Gateshead","Give","Goldcoast","Hartford","Heidelberg","Hvittingfoss","Idikan","Infantis","Javiana","Johannesburg","Vaccined","Kiambu","Koessen","Leiden","Livingstone","Lomalinda","Lubbock","Mbandaka","Meleagridis","Miami","Mississippi","Montevideo","Muenster","Norwich","Ohio","Okatie","Oranienburg","Panama","Poona","Potsdam","Reading","Rissen","Rubislaw","Sandiego","Schwarzengrund","Senftenberg","Telelkebir","Thompson","Uganda","Urbana","Vinohrady","Virchow","Weltevreden") if want to exclude all lower-viruelence serotypes;
   scaling_factor = 0.002, 
   # 0.00023 -> pill=2.041748e-06
   # 0.00024 -> pill=2.093632e-06
@@ -1654,18 +1658,17 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   save_runs = TRUE, # Save runs to file?; IDEALLY KEEP AS TRUE
   use_attenuation = TRUE, # Use attenuation?
   use_scaling_factor = TRUE, # Use scaling factor?; DO NOT CHANGE
-  comment = "m3_variable_2021_list1_new_20" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
+  comment = "m3_variable_2021_list1_Baye_kentucky" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
 )
-m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Kim et al. 2024 paper
+m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Li et al., 2025 paper
 mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)# Average probability of illness; adjust the SF to match this number to around 2E-6
 ```
 
-
-```{r Variable Attenuation & Scaled Run for comminuted turkey, HACCP baseline (2016-2021) #inclusion list 2}
+```{r Variable Attenuation & Scaled Run for comminuted turkey, HACCP baseline (2016-2021) Bayesian fitting #inclusion list 2}
 # Parameter setup ----
 # NOTE: You can put these number straight into poultry_model_clustered() instead of defining them here, but this method lets you cite data sources more cleanly
-salmonella_mean <- -4.857 #FSIS HACCP Data 2016-2021
-salmonella_st_dev <- 2.052 #FSIS HACCP Data 2016-2021
+salmonella_mean <- -4.857 #FSIS HACCP Data 2016-2021 using Bayesian fitting
+salmonella_st_dev <- 2.052 #FSIS HACCP Data 2016-2021 using Bayesian fitting
 
 product_consumed_per_individual_per_day_mean <- 1.915239 # CDC 2016, Lambertini  et al. (2021) convert 4.41ln to log
 product_consumed_per_individual_per_day_st_dev <- 0.2866344 # CDC 2016, Lambertini  et al. (2021) convert 0.66ln to log 
@@ -1686,7 +1689,9 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   # Change the inclusion list based on different scenarios;
   # inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
   # inclusion_2_Cluster1 for 2016-2021:c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-","Berta","Newport", "Saintpaul", "Enteritidis", "Litchfield", "Manhattan");
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"), 
+  #c("Vaccined") of want to exclude "Typhimurium - Possible Vaccine Strain") ;
+  #c("Adelaide","Agbeni","Agona","Alachua","Albany","Anatum","Bareilly","Braenderup","Brandenburg","Calabar","Carrau","Cerro","Chester","Concord","Cubana","Duisburg","Eastbourne","Gaminara","Gateshead","Give","Goldcoast","Hartford","Heidelberg","Hvittingfoss","Idikan","Infantis","Javiana","Johannesburg","Vaccined","Kiambu","Koessen","Leiden","Livingstone","Lomalinda","Lubbock","Mbandaka","Meleagridis","Miami","Mississippi","Montevideo","Muenster","Norwich","Ohio","Okatie","Oranienburg","Panama","Poona","Potsdam","Reading","Rissen","Rubislaw","Sandiego","Schwarzengrund","Senftenberg","Telelkebir","Thompson","Uganda","Urbana","Vinohrady","Virchow","Weltevreden") if want to exclude all lower-viruelence serotypes;
   scaling_factor = 0.002, 
   # 0.00023 -> pill=2.041748e-06
   # 0.00024 -> pill=2.093632e-06
@@ -1701,13 +1706,101 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   save_runs = TRUE, # Save runs to file?; IDEALLY KEEP AS TRUE
   use_attenuation = TRUE, # Use attenuation?
   use_scaling_factor = TRUE, # Use scaling factor?; DO NOT CHANGE
-  comment = "m3_variable_2021_list2_new_20" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
+  comment = "m3_variable_2021_list2_Baye_kentucky" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
 )
-m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Kim et al. 2024 paper
+m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Li et al., 2025 paper
 mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)# Average probability of illness; adjust the SF to match this number to around 2E-6
 ```
 
+```{r Variable Attenuation & Scaled Run for comminuted turkey, HACCP baseline (2016-2021) FSIS Salmonella level #inclusion list 1}
+# Parameter setup ----
+# NOTE: You can put these number straight into poultry_model_clustered() instead of defining them here, but this method lets you cite data sources more cleanly
+salmonella_mean <- -4.857 #FSIS HACCP Data 2016-2021
+salmonella_st_dev <- 2.333 #FSIS HACCP Data 2016-2021
 
+product_consumed_per_individual_per_day_mean <- 1.915239 # CDC 2016, Lambertini  et al. (2021) convert 4.41ln to log
+product_consumed_per_individual_per_day_st_dev <- 0.2866344 # CDC 2016, Lambertini  et al. (2021) convert 0.66ln to log 
+
+# Poultry Model Running ----
+# Create a new variable (i.e., raw_model_results) for each different scenario instead of overwriting to the same one
+m3_variable_attenuation_scaled <- poultry_model_clustered(
+  total_iterations = 1e6, # total_iterations, total number of iterations to run the model per simulation; RECOMMENDED TO USE 1e5-1e6 FOR FINAL RUNS, USE FEWER FOR "EXPERIMENTING" OR IT WILL TAKE LONGER,
+  total_simulations = 10, # total_simulations, total number of simulations to run; START WITH 1 FOR "EXPERIMENTING", USE 10 TO GET MORE DATA
+  cores = 12, # cores, total number of CPU cores to use in parallel, if you have fewer than the number specified the model should default to maximum available instead; MOST PCS SHOULD HAVE 12, IF UNSURE USE 12 OR detectCores()
+  model_mode = 3, # model_mode: 1 = use Beta-Poisson model and parameters from WHO/FAO (2002) for all serotypes, 2 = use Beta-Poisson model with parameters from WHO/FAO (2002)  for all serotypes that are not Typhimurium - Possible Vaccine Strain, 3 = use Serotype-specific DR parameters collected from Teunis (2022); MODEL MODE MUST BE 1, 2, OR 3, USE AS APPROPRIATE
+  serotype_probabilities = serotype_probabilities_2021, # dataframe with serotype probabilities; CAN BE SUBSTITUTED WITH A DIFFERENT DATAFRAME, SEE TOP OF setup
+  serotype_equivalents = serotype_equivalents, # dataframe with how to serotype equivalences for Tuenis submodel; CAN BE SUBSTITUTED WITH A DIFFERENT DATAFRAME, SEE TOP OF setup
+  salmonella_mean = salmonella_mean, # Log10 Salmonella dose mean; CAN BE CHANGED WITH A DIFFERENT VALUE
+  salmonella_st_dev = salmonella_st_dev, # Log10 Salmonella dose standard deviation; CAN BE CHANGED WITH A DIFFERENT VALUE
+  attenuation_input = c(-5, 1.91), # FSIS Variable attenuation, Quantitative Risk Assessment for Salmonella in Raw Chicken and Raw Chicken Products, page 42 
+  inclusion_list_input=c("Typhimurium", "Hadar", "Muenchen"),
+  # Change the inclusion list based on different scenarios;
+  # inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
+  # inclusion_2_Cluster1 for 2016-2021:c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-","Berta","Newport", "Saintpaul", "Enteritidis", "Litchfield", "Manhattan");
+  exclusion_list_input=c("Kentucky"), 
+  #c("Vaccined") of want to exclude "Typhimurium - Possible Vaccine Strain") ;
+  #c("Adelaide","Agbeni","Agona","Alachua","Albany","Anatum","Bareilly","Braenderup","Brandenburg","Calabar","Carrau","Cerro","Chester","Concord","Cubana","Duisburg","Eastbourne","Gaminara","Gateshead","Give","Goldcoast","Hartford","Heidelberg","Hvittingfoss","Idikan","Infantis","Javiana","Johannesburg","Vaccined","Kiambu","Koessen","Leiden","Livingstone","Lomalinda","Lubbock","Mbandaka","Meleagridis","Miami","Mississippi","Montevideo","Muenster","Norwich","Ohio","Okatie","Oranienburg","Panama","Poona","Potsdam","Reading","Rissen","Rubislaw","Sandiego","Schwarzengrund","Senftenberg","Telelkebir","Thompson","Uganda","Urbana","Vinohrady","Virchow","Weltevreden") if want to exclude all lower-viruelence serotypes;
+  scaling_factor = 0.00025, 
+  product_consumed_per_individual_per_day_mean = product_consumed_per_individual_per_day_mean, # Log10 Product consumed mean; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
+  product_consumed_per_individual_per_day_st_dev = product_consumed_per_individual_per_day_st_dev, # Log10 Product consumed standard deviation; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
+  annual_servings = 10983387032, #28482586137, total turkey servings per year in the U.S; POPULATION*NUMBER OF SERVINGS PER PERSON, CURRENTLY USES 2023 DATA #10983387032 for ground turkey 
+  teunis_dose_response = teunis_dose_response, # Tuenis DR function; DO NOT CHANGE
+  tuenis_submodel_parameters =  tuenis_submodel_parameters, # dataframe with Tuenis function subparameters; DO NOT CHANGE
+  pr_ill_from_dose = pr_ill_from_dose, # Probability illness from dose function; DO NOT CHANGE
+  poultry_model = poultry_model, # Core poultry model function; DO NOT CHANGE
+  save_runs = TRUE, # Save runs to file?; IDEALLY KEEP AS TRUE
+  use_attenuation = TRUE, # Use attenuation?
+  use_scaling_factor = TRUE, # Use scaling factor?; DO NOT CHANGE
+  comment = "m3_variable_2021_list1_FSISfit_kentucky" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
+)
+m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Li et al., 2025 paper
+mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)# Average probability of illness; adjust the SF to match this number to around 2E-6
+```
+
+```{r Variable Attenuation & Scaled Run for comminuted turkey, HACCP baseline (2016-2021) FSIS Salmonella level #inclusion list 2}
+# Parameter setup ----
+# NOTE: You can put these number straight into poultry_model_clustered() instead of defining them here, but this method lets you cite data sources more cleanly
+salmonella_mean <- -4.857 #FSIS HACCP Data 2016-2021
+salmonella_st_dev <- 2.333 #FSIS HACCP Data 2016-2021
+
+product_consumed_per_individual_per_day_mean <- 1.915239 # CDC 2016, Lambertini  et al. (2021) convert 4.41ln to log
+product_consumed_per_individual_per_day_st_dev <- 0.2866344 # CDC 2016, Lambertini  et al. (2021) convert 0.66ln to log 
+
+# Poultry Model Running ----
+# Create a new variable (i.e., raw_model_results) for each different scenario instead of overwriting to the same one
+m3_variable_attenuation_scaled <- poultry_model_clustered(
+  total_iterations = 1e6, # total_iterations, total number of iterations to run the model per simulation; RECOMMENDED TO USE 1e5-1e6 FOR FINAL RUNS, USE FEWER FOR "EXPERIMENTING" OR IT WILL TAKE LONGER,
+  total_simulations = 10, # total_simulations, total number of simulations to run; START WITH 1 FOR "EXPERIMENTING", USE 10 TO GET MORE DATA
+  cores = 12, # cores, total number of CPU cores to use in parallel, if you have fewer than the number specified the model should default to maximum available instead; MOST PCS SHOULD HAVE 12, IF UNSURE USE 12 OR detectCores()
+  model_mode = 3, # model_mode: 1 = use Beta-Poisson model and parameters from WHO/FAO (2002) for all serotypes, 2 = use Beta-Poisson model with parameters from WHO/FAO (2002)  for all serotypes that are not Typhimurium - Possible Vaccine Strain, 3 = use Serotype-specific DR parameters collected from Teunis (2022); MODEL MODE MUST BE 1, 2, OR 3, USE AS APPROPRIATE
+  serotype_probabilities = serotype_probabilities_2021, # dataframe with serotype probabilities; CAN BE SUBSTITUTED WITH A DIFFERENT DATAFRAME, SEE TOP OF setup
+  serotype_equivalents = serotype_equivalents, # dataframe with how to serotype equivalences for Tuenis submodel; CAN BE SUBSTITUTED WITH A DIFFERENT DATAFRAME, SEE TOP OF setup
+  salmonella_mean = salmonella_mean, # Log10 Salmonella dose mean; CAN BE CHANGED WITH A DIFFERENT VALUE
+  salmonella_st_dev = salmonella_st_dev, # Log10 Salmonella dose standard deviation; CAN BE CHANGED WITH A DIFFERENT VALUE
+  attenuation_input = c(-5, 1.91), # FSIS Variable attenuation, Quantitative Risk Assessment for Salmonella in Raw Chicken and Raw Chicken Products, page 42 
+  inclusion_list_input=c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-","Berta","Newport", "Saintpaul", "Enteritidis", "Litchfield", "Manhattan"),
+  # Change the inclusion list based on different scenarios;
+  # inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
+  # inclusion_2_Cluster1 for 2016-2021:c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-","Berta","Newport", "Saintpaul", "Enteritidis", "Litchfield", "Manhattan");
+  exclusion_list_input=c("Kentucky"), 
+  #c("Vaccined") of want to exclude "Typhimurium - Possible Vaccine Strain") ;
+  #c("Adelaide","Agbeni","Agona","Alachua","Albany","Anatum","Bareilly","Braenderup","Brandenburg","Calabar","Carrau","Cerro","Chester","Concord","Cubana","Duisburg","Eastbourne","Gaminara","Gateshead","Give","Goldcoast","Hartford","Heidelberg","Hvittingfoss","Idikan","Infantis","Javiana","Johannesburg","Vaccined","Kiambu","Koessen","Leiden","Livingstone","Lomalinda","Lubbock","Mbandaka","Meleagridis","Miami","Mississippi","Montevideo","Muenster","Norwich","Ohio","Okatie","Oranienburg","Panama","Poona","Potsdam","Reading","Rissen","Rubislaw","Sandiego","Schwarzengrund","Senftenberg","Telelkebir","Thompson","Uganda","Urbana","Vinohrady","Virchow","Weltevreden") if want to exclude all lower-viruelence serotypes;
+  scaling_factor = 0.00025, 
+  product_consumed_per_individual_per_day_mean = product_consumed_per_individual_per_day_mean, # Log10 Product consumed mean; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
+  product_consumed_per_individual_per_day_st_dev = product_consumed_per_individual_per_day_st_dev, # Log10 Product consumed standard deviation; CAN BE CHANGED IF YOU HAVE NEW DATA, OTHERWISE USE CDC 2016, Lambertini  et al. (2019)
+  annual_servings = 10983387032, #28482586137, total turkey servings per year in the U.S; POPULATION*NUMBER OF SERVINGS PER PERSON, CURRENTLY USES 2023 DATA #10983387032 for ground turkey 
+  teunis_dose_response = teunis_dose_response, # Tuenis DR function; DO NOT CHANGE
+  tuenis_submodel_parameters =  tuenis_submodel_parameters, # dataframe with Tuenis function subparameters; DO NOT CHANGE
+  pr_ill_from_dose = pr_ill_from_dose, # Probability illness from dose function; DO NOT CHANGE
+  poultry_model = poultry_model, # Core poultry model function; DO NOT CHANGE
+  save_runs = TRUE, # Save runs to file?; IDEALLY KEEP AS TRUE
+  use_attenuation = TRUE, # Use attenuation?
+  use_scaling_factor = TRUE, # Use scaling factor?; DO NOT CHANGE
+  comment = "m3_variable_2021_list2_FSISfit_kentucky" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
+)
+m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Li et al., 2025 paper
+mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)# Average probability of illness; adjust the SF to match this number to around 2E-6
+```
 
 ```{r Variable Attenuation & Scaled Run for comminuted turkey, HACCP new (2023-2024) #inclusion list 1}
 # Parameter setup ----
@@ -1734,7 +1827,9 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   # Change the inclusion list based on different scenarios;
   # inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
   # inclusion_2_Cluster1 for 2023-2024: c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-", "Enteritidis", "Newport")
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"), 
+  #c("Vaccined") of want to exclude "Typhimurium - Possible Vaccine Strain") ;
+  #c("Adelaide","Agbeni","Agona","Alachua","Albany","Anatum","Bareilly","Braenderup","Brandenburg","Calabar","Carrau","Cerro","Chester","Concord","Cubana","Duisburg","Eastbourne","Gaminara","Gateshead","Give","Goldcoast","Hartford","Heidelberg","Hvittingfoss","Idikan","Infantis","Javiana","Johannesburg","Vaccined","Kiambu","Koessen","Leiden","Livingstone","Lomalinda","Lubbock","Mbandaka","Meleagridis","Miami","Mississippi","Montevideo","Muenster","Norwich","Ohio","Okatie","Oranienburg","Panama","Poona","Potsdam","Reading","Rissen","Rubislaw","Sandiego","Schwarzengrund","Senftenberg","Telelkebir","Thompson","Uganda","Urbana","Vinohrady","Virchow","Weltevreden") if want to exclude all lower-viruelence serotypes;
   scaling_factor = 0.00025,
   # 0.00025 -> 2.297141e-06 (SPHS), 
   # 0.00025 -> 2.232401e-06 (cluster1),
@@ -1748,9 +1843,9 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   save_runs = TRUE, # Save runs to file?; IDEALLY KEEP AS TRUE
   use_attenuation = TRUE, # Use attenuation?
   use_scaling_factor = TRUE, # Use scaling factor?; DO NOT CHANGE
-  comment = "m3_variable_2024_list1_updatedsero" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
+  comment = "m3_variable_2024_list1_kentucky" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
 )
-m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Kim et al. 2024 paper
+m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Li et al., 2025 paper
 mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)# Average probability of illness; adjust the SF to match this number to around 2E-6
 ```
 
@@ -1779,7 +1874,9 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   # Change the inclusion list based on different scenarios;
   # inclusion_1: c("Typhimurium", "Hadar", "Muenchen"); 
   # inclusion_2_Cluster1 for 2023-2024: c("Typhimurium", "Hadar", "Muenchen","I 4,[5],12:i:-", "Enteritidis", "Newport")
-  exclusion_list_input=c("Vaccined"), #c("Typhimurium - Possible Vaccine Strain", change to "Vaccined" in the proportion excel)
+  exclusion_list_input=c("Kentucky"),
+  #c("Vaccined") of want to exclude "Typhimurium - Possible Vaccine Strain") ;
+  #c("Adelaide","Agbeni","Agona","Alachua","Albany","Anatum","Bareilly","Braenderup","Brandenburg","Calabar","Carrau","Cerro","Chester","Concord","Cubana","Duisburg","Eastbourne","Gaminara","Gateshead","Give","Goldcoast","Hartford","Heidelberg","Hvittingfoss","Idikan","Infantis","Javiana","Johannesburg","Vaccined","Kiambu","Koessen","Leiden","Livingstone","Lomalinda","Lubbock","Mbandaka","Meleagridis","Miami","Mississippi","Montevideo","Muenster","Norwich","Ohio","Okatie","Oranienburg","Panama","Poona","Potsdam","Reading","Rissen","Rubislaw","Sandiego","Schwarzengrund","Senftenberg","Telelkebir","Thompson","Uganda","Urbana","Vinohrady","Virchow","Weltevreden") if want to exclude all lower-viruelence serotypes;
   scaling_factor = 0.00025,
   # 0.00025 -> 2.297141e-06 (SPHS), 
   # 0.00025 -> 2.232401e-06 (cluster1),
@@ -1793,11 +1890,12 @@ m3_variable_attenuation_scaled <- poultry_model_clustered(
   save_runs = TRUE, # Save runs to file?; IDEALLY KEEP AS TRUE
   use_attenuation = TRUE, # Use attenuation?
   use_scaling_factor = TRUE, # Use scaling factor?; DO NOT CHANGE
-  comment = "m3_variable_2024_list2_new" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
+  comment = "m3_variable_2024_list2_Kentucky" # User/Scenario comment; HIGHLY RECOMMENDED TO EDIT AS APPROPRIATE
 )
-m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Kim et al. 2024 paper
+m3_variable_attenuation_scaled_specifics <- get_table_values(m3_variable_attenuation_scaled) # Extracts specific data needed for Li et al., 2025 paper
 mean(m3_variable_attenuation_scaled$tdr_mean_pr_ill)# Average probability of illness; adjust the SF to match this number to around 2E-6
 ```
+
 
 
 ```{r}
