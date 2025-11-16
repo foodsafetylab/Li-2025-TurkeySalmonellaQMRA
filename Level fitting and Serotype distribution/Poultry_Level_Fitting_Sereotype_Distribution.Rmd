@@ -215,8 +215,8 @@ qpcr_fit <- function (input_table, lod, enumeration_lower, enumeration_upper, up
         left_right_table$left[i] <- (enumeration_upper)
         left_right_table$right[i] <- (upper_bound)
       } else if ((enumeration_lower)<=x & x<=(enumeration_upper)) { # Between enumeration_lower and enumeration_upper
-        left_right_table$left[i] <- x/(1814/400)
-        left_right_table$right[i] <- x/(1814/400)
+        left_right_table$left[i] <- x
+        left_right_table$right[i] <- x
       } else if (x < enumeration_lower) { # Below enumeration_lower
         left_right_table$left[i] <- (lod)
         left_right_table$right[i] <- (enumeration_lower)
@@ -322,9 +322,10 @@ fsis_haccp_turkey_2024 <- read.csv("../Raw data/FSIS_RAW_Poultry_combined_2024-0
 
 subset_data <- subset(fsis_haccp_turkey_2024, select = c("SalmonellaSpAnalysis", "SalmonellaQPCRg"))
 subset_data <- subset_data[-which(subset_data$SalmonellaSpAnalysis=="Positive" & is.na(subset_data$SalmonellaQPCRg)),]
-fsis_haccp_turkey_2024_fit <- qpcr_fit(subset_data, 1/325, 10^1, 10^7, 10^8, "qPCR") #why we use 1/375, check what others use 
+fsis_haccp_turkey_2024_fit <- qpcr_fit(subset_data, 1/325, 10^1, 10^7, 10^8, "qPCR")  
 fsis_haccp_turkey_2024_fit$estimate[1]
 fsis_haccp_turkey_2024_fit$estimate[2]
+fitted_count_ground(fsis_haccp_turkey_2024_fit$estimate[1], fsis_haccp_turkey_2024_fit$estimate[2])
 
 nrow(fsis_haccp_turkey_2024)
 length(fsis_haccp_turkey_2024$SalmonellaSpAnalysis[which(fsis_haccp_turkey_2024$SalmonellaSpAnalysis=="Negative")])
