@@ -26,7 +26,8 @@ USA<br>
 [mstasie@illinois.edu](mailto:mstasie@illinois.edu)
 
 ## Citation
-Include citation here.
+Li, Y., Barnett-Neefs, C., & Stasiewicz, M. J. (2026). Salmonellosis risk assessment for comminuted turkey under different specificities of concentration-based and virulence-based final product standards. Microbial Risk Analysis, 31, 100359. https://doi.org/10.1016/j.mran.2025.100359
+
 
 ## License
 This project's code is licensed under the GNU General Public License v3.0 and dataset is licensed the Creative Commons Attribution Share Alike 4.0 International license. Please see the [LICENSE.code](/LICENSE.code) and [LICENSE.dataset](/LICENSE.dataset) files for details.
